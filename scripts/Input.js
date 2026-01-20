@@ -2,6 +2,7 @@ import { Vector2 } from "three";
 import { renderer } from "./Scene.js";
 import { time } from "./Time.js";
 import { FullscreenUpdate, openMenu } from "./UI.js";
+import { handleScroll } from "./Control.js";
 
 class Pointer
 {
@@ -169,6 +170,12 @@ export function Start()
             mouseMovement.add(new Vector2(e.movementX, -e.movementY));
         }
     });
+
+    // Wheel event for web page mode scrolling
+    document.addEventListener("wheel", function(e)
+    {
+        handleScroll(e.deltaY);
+    }, { passive: true });
 
     renderer.domElement.addEventListener("pointerdown", function(e)
     {   

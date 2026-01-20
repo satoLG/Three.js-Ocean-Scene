@@ -4,12 +4,34 @@ export const surfaceVertex =
 
     varying vec2 _worldPos;
     varying vec2 _uv;
+    varying float _elevation;
+
+    // Wave parameters - for waterline undulation near camera
+    const float uBigWavesElevation = 0.01;
+    const vec2 uBigWavesFrequency = vec2(0.08, 0.1);  // Higher = more waves visible
+    const float uBigWavesSpeed = 0.2;
+    const float uWaveFadeStart = 50.0;   // Distance where waves start fading
+    const float uWaveFadeEnd = 200.0;    // Distance where waves are completely gone
 
     void main()
     {
         vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        
+        // Calculate distance from camera (horizontal only)
+        float distFromCamera = length(worldPos.xz - cameraPosition.xz);
+        
+        // Fade out waves based on distance (1.0 near, 0.0 far)
+        float waveFade = 1.0 - clamp((distFromCamera - uWaveFadeStart) / (uWaveFadeEnd - uWaveFadeStart), 0.0, 1.0);
+        
+        // Calculate wave elevation - just big waves for waterline undulation
+        float elevation = sin(worldPos.x * uBigWavesFrequency.x + _Time * uBigWavesSpeed) *
+                          sin(worldPos.z * uBigWavesFrequency.y + _Time * uBigWavesSpeed) * uBigWavesElevation * waveFade;
+
+        worldPos.y += elevation;
+        
         _worldPos = worldPos.xz;
         _uv = _worldPos * NORMAL_MAP_SCALE;
+        _elevation = elevation;
         gl_Position = projectionMatrix * viewMatrix * worldPos;
     }
 `;
@@ -20,10 +42,11 @@ export const surfaceFragment =
 
     varying vec2 _worldPos;
     varying vec2 _uv;
+    varying float _elevation;
 
     void main()
     {
-        vec3 viewVec = vec3(_worldPos.x, 0.0, _worldPos.y) - cameraPosition;
+        vec3 viewVec = vec3(_worldPos.x, _elevation, _worldPos.y) - cameraPosition;
         float viewLen = length(viewVec);
         vec3 viewDir = viewVec / viewLen;
 
@@ -35,7 +58,7 @@ export const surfaceFragment =
 
         sampleDither(gl_FragCoord.xy);
 
-        if (cameraPosition.y > 0.0)
+        if (cameraPosition.y > _elevation)
         {
             vec3 halfWayDir = normalize(_DirToLight - viewDir);
             float specular = max(0.0, dot(normal, halfWayDir));
@@ -57,7 +80,7 @@ export const surfaceFragment =
         float originY = cameraPosition.y;
         viewLen = min(viewLen, MAX_VIEW_DEPTH);
         float sampleY = originY + viewDir.y * viewLen;
-        vec3 light = exp((sampleY - MAX_VIEW_DEPTH_DENSITY) * ABSORPTION);
+        vec3 light = exp((sampleY - MAX_VIEW_DEPTH_DENSITY) * _Absorption);
         light *= _Light;
 
         float reflectivity = pow2(1.0 - max(0.0, dot(viewDir, normal)));
@@ -67,7 +90,7 @@ export const surfaceFragment =
         {
             vec3 r = reflect(viewDir, -normal);
             sampleY = r.y * (MAX_VIEW_DEPTH - viewLen);
-            vec3 rColor = exp((sampleY - MAX_VIEW_DEPTH_DENSITY) * ABSORPTION);
+            vec3 rColor = exp((sampleY - MAX_VIEW_DEPTH_DENSITY) * _Absorption);
             rColor *= _Light;
 
             gl_FragColor = vec4(mix(rColor, light, t), 1.0);
@@ -112,7 +135,7 @@ export const volumeFragment =
         viewLen = min(viewLen, MAX_VIEW_DEPTH);
 
         float sampleY = originY + viewDir.y * viewLen;
-        vec3 light = exp((sampleY - viewLen * DENSITY) * ABSORPTION);
+        vec3 light = exp((sampleY - viewLen * DENSITY) * _Absorption);
         light *= _Light;
         
         gl_FragColor = vec4(light, 1.0);
@@ -181,7 +204,7 @@ export const objectFragment =
         viewLen = min(viewLen, MAX_VIEW_DEPTH);
 
         float sampleY = originY + viewDir.y * viewLen;
-        vec3 light = exp((sampleY - viewLen * DENSITY) * ABSORPTION) * _Light;
+        vec3 light = exp((sampleY - viewLen * DENSITY) * _Absorption) * _Light;
 
         float spotLight = 0.0;
         float spotLightDistance = 1.0;
@@ -267,7 +290,7 @@ export const triplanarFragment =
         viewLen = min(viewLen, MAX_VIEW_DEPTH);
 
         float sampleY = originY + viewDir.y * viewLen;
-        vec3 light = exp((sampleY - viewLen * DENSITY) * ABSORPTION) * _Light;
+        vec3 light = exp((sampleY - viewLen * DENSITY) * _Absorption) * _Light;
 
         float spotLight = 0.0;
         float spotLightDistance = 1.0;

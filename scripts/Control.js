@@ -11,6 +11,34 @@ const smoothSpeed = 15;
 const mindelta = 0.0001;
 const moveSpeedExpMultiplier = 0;
 
+// Web page mode settings
+let webPageMode = true;  // Start in web page mode
+const webPageTopY = 1;      // Top camera position (above water)
+const webPageBottomY = -8;  // Bottom camera position (near sea floor)
+const scrollSpeed = 0.05;    // How fast scroll moves camera
+const scrollSmooth = 5;      // Smoothing factor
+let targetY = webPageTopY;   // Target Y position
+let currentY = webPageTopY;  // Current Y position (for smoothing)
+
+export function isWebPageMode() {
+    return webPageMode;
+}
+
+export function toggleCameraMode() {
+    webPageMode = !webPageMode;
+    if (webPageMode) {
+        // Reset to top position when entering web page mode
+        targetY = webPageTopY;
+    }
+    return webPageMode;
+}
+
+export function handleScroll(deltaY) {
+    if (webPageMode) {
+        targetY = MathUtils.clamp(targetY - deltaY * scrollSpeed, webPageBottomY, webPageTopY);
+    }
+}
+
 window.mobileAndTabletCheck = function()
 {
     let check = false;
@@ -35,8 +63,9 @@ export function SetLookSensitivityMultiplier(value)
 
 let moving = false;
 let moveVector = new Vector3(0, 0, 0);
-let phi = 0;
-let tetha = 0;
+// Fixed camera looking at twilight zone (where sun/moon path crosses horizon)
+let phi = Math.PI * 0.65;  // Look toward the twilight/sunrise-sunset direction
+let tetha = 0.15;          // Slightly above horizon
 let moveSpeedMultiplier = 1;
 
 class Joystick
@@ -125,7 +154,7 @@ export function Update()
     {
         let pointer = pointers[i];
 
-        if (touchControls)
+        if (touchControls && !webPageMode)
         {
             let pointerPosNormalized = pointer.position.clone().divide(new Vector2(window.innerWidth, window.innerHeight));
 
@@ -180,7 +209,15 @@ export function Update()
                 screen.orientation.lock("landscape");
             }
         }
-        else if (pointer.type == PointerType.mouse && !document.pointerLockElement && pointer.phase == PointerPhase.ended && time - lastPointerLockChange > 1.5)
+        else if (touchControls && webPageMode)
+        {
+            // Touch scrolling in web page mode
+            if (pointer.phase == PointerPhase.moved)
+            {
+                handleScroll(-pointer.deltaPosition.y * 2);
+            }
+        }
+        else if (pointer.type == PointerType.mouse && !document.pointerLockElement && pointer.phase == PointerPhase.ended && time - lastPointerLockChange > 1.5 && !webPageMode)
         {
             renderer.domElement.requestPointerLock();
         }
@@ -188,7 +225,7 @@ export function Update()
 
     let targetVector = new Vector3();
 
-    if (!touchControls)
+    if (!touchControls && !webPageMode)
     {
         if (keysPressed.includes(KeyCodes.keyA))
         {
@@ -232,7 +269,7 @@ export function Update()
             }
         }
     }
-    else
+    else if (!webPageMode)
     {
         targetVector.set(joystick.vector.x, 0, -joystick.vector.y);
 
@@ -297,7 +334,16 @@ export function Update()
     camera.position.add(new Vector3().copy(cameraForward).multiplyScalar(moveVector.z * moveSpeed * deltaTime));
     //camera.position.clamp(new Vector3(-borderRadius, -5000, -borderRadius), new Vector3(borderRadius, 5000, borderRadius));
 
-    if (!touchControls)
+    // Web page mode: override Y position with smooth scroll
+    if (webPageMode) {
+        currentY = MathUtils.damp(currentY, targetY, scrollSmooth, deltaTime);
+        camera.position.y = currentY;
+        // Keep camera position fixed on X and Z in web page mode
+        camera.position.x = 0;
+        camera.position.z = 0;
+    }
+
+    if (!touchControls && !webPageMode)
     {
         phi += mouseMovement.x * lookSensitivity * sensitivityMult;
         tetha = MathUtils.clamp(tetha + mouseMovement.y * lookSensitivity * sensitivityMult, -Math.PI / 2, Math.PI / 2);

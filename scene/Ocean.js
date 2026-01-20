@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Mesh } from "three";
+import { BufferAttribute, BufferGeometry, Mesh, PlaneGeometry } from "three";
 import * as oceanMaterials from "../materials/OceanMaterial.js";
 import { camera } from "../scripts/Scene.js";
 
@@ -12,23 +12,10 @@ export function Start()
     const halfSize = 1500;
     const depth = 1000;
 
-    const surfaceVertices = new Float32Array
-    ([
-        -halfSize, 0, -halfSize,
-        halfSize, 0, -halfSize,
-        -halfSize, 0, halfSize,
-        halfSize, 0, halfSize
-    ]);
-
-    const surfaceIndices = 
-    [
-        2, 3, 0,
-        3, 1, 0
-    ];
-
-    const surfaceGeometry = new BufferGeometry();
-    surfaceGeometry.setAttribute("position", new BufferAttribute(surfaceVertices, 3));
-    surfaceGeometry.setIndex(surfaceIndices);
+    // Use PlaneGeometry with subdivisions for vertex displacement waves
+    // 64 segments = 65x65 = 4,225 vertices - enough for visible horizon waves
+    const surfaceGeometry = new PlaneGeometry(halfSize * 2, halfSize * 2, 64, 64);
+    surfaceGeometry.rotateX(-Math.PI / 2); // Rotate to be horizontal (XZ plane)
 
     surface.geometry = surfaceGeometry;
     surface.material = oceanMaterials.surface;

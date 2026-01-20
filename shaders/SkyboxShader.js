@@ -1,16 +1,19 @@
 export const vertex =
 /*glsl*/`
     uniform mat3 _SkyRotationMatrix;
+    uniform mat3 _MoonRotationMatrix;
 
     attribute vec3 coord;
 
     varying vec3 _worldPos;
     varying vec3 _coord;
+    varying vec3 _moonCoord;
 
     void main()
     {
         _worldPos = coord;
         _coord = _SkyRotationMatrix * _worldPos;
+        _moonCoord = _MoonRotationMatrix * _worldPos;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
 `;
@@ -21,11 +24,13 @@ export const fragment =
 
     varying vec3 _worldPos;
     varying vec3 _coord;
+    varying vec3 _moonCoord;
 
     void main() 
     {
         vec3 worldDir = normalize(_worldPos);
         vec3 viewDir = normalize(_coord);
+        vec3 moonDir = normalize(_moonCoord);
 
         float dither = (texture2D(_DitherTexture, (gl_FragCoord.xy - vec2(0.5)) / _DitherTextureSize).x - 0.5) * DITHER_STRENGTH;
         float density = clamp(pow2(1.0 - max(0.0, dot(worldDir, UP) + dither)), 0.0, 1.0);
@@ -33,7 +38,8 @@ export const fragment =
         float sunLight = dot(viewDir, UP);
         float sun = min(pow(max(0.0, sunLight), SUN_SHARPNESS) * SUN_SIZE, 1.0);
 
-        float moonLight = -sunLight;
+        // Moon uses its own rotated direction (offset from sun on the same arc)
+        float moonLight = -dot(moonDir, UP);
         float moon = min(pow(max(0.0, moonLight), MOON_SHARPNESS) * MOON_SIZE, 1.0);
 
         vec3 day = mix(DAY_SKY_COLOR, DAY_HORIZON_COLOR, density);

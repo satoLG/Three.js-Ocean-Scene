@@ -42,6 +42,7 @@ const skybox =
     const vec3 UP = vec3(0.0, 1.0, 0.0);
 
     uniform mat3 _SkyRotationMatrix;
+    uniform mat3 _MoonRotationMatrix;
 
     uniform sampler2D _DitherTexture;
     uniform vec2 _DitherTextureSize;
@@ -54,6 +55,7 @@ const skybox =
     uniform sampler2D _Stars;
     uniform float _SpecularVisibility;
     uniform vec3 _DirToLight;
+    uniform vec3 _DirToMoon;
     uniform vec3 _Light;
 
     float dither = 0.0;
@@ -132,13 +134,15 @@ const skybox =
     vec3 sampleSkybox(vec3 dir)
     {
         vec3 viewDir = _SkyRotationMatrix * dir;
+        vec3 moonViewDir = _MoonRotationMatrix * dir;
 
         float density = clamp(pow2(1.0 - max(0.0, dot(dir, UP) + dither)), 0.0, 1.0);
 
         float sunLight = dot(viewDir, UP);
         float sun = min(pow(max(0.0, sunLight), SUN_SHARPNESS) * SUN_SIZE, 1.0);
 
-        float moonLight = -sunLight;
+        // Moon uses its own rotation matrix (offset from sun)
+        float moonLight = -dot(moonViewDir, UP);
         float moon = min(pow(max(0.0, moonLight), MOON_SHARPNESS) * MOON_SIZE, 1.0);
 
         vec3 day = mix(DAY_SKY_COLOR, DAY_HORIZON_COLOR, density);
@@ -189,12 +193,12 @@ const ocean =
     const float MAX_VIEW_DEPTH = 100.0;
     const float DENSITY = 0.35;
     const float MAX_VIEW_DEPTH_DENSITY = MAX_VIEW_DEPTH * DENSITY;
-    const vec3 ABSORPTION = vec3(1.0) / vec3(10.0, 40.0, 100.0);
     const float CRITICAL_ANGLE = asin(1.0 / 1.33) / PI_HALF;
 
     uniform float _Time;
     uniform sampler2D _NormalMap1;
     uniform sampler2D _NormalMap2;
+    uniform vec3 _Absorption;
 `;
 
 const parallax = 

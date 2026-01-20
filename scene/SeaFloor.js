@@ -12,13 +12,13 @@ const worldSize1 = worldSize + 1;
 const scale = 1;
 const halfSize = tilesPerAxis * tileSize * 0.5 * scale;
 
-const base1 = new Vector2(0.003, 500);
-const base2 = new Vector2(0.008, 0.2);
-const base3 = new Vector2(0.02, 0.1);
+const base1 = new Vector2(0.003, 15);
+const base2 = new Vector2(0.008, 0.1);
+const base3 = new Vector2(0.02, 0.05);
 
 const erosion = new Vector3(0.008, 0.02, 0.1);
 
-const hill = new Vector2(0.03, 100);
+const hill = new Vector2(0.03, 0);
 
 const reliefPoints = 
 [
@@ -196,7 +196,7 @@ export function Start()
                     let worldZ = z + tileZ * tileSize;
 
                     vertices[i] = (worldX - halfSize) * scale;
-                    vertices[i + 1] = heights[worldZ * worldSize1 + worldX] * scale;
+                    vertices[i + 1] = heights[worldZ * worldSize1 + worldX] * scale - 10;
                     vertices[i + 2] = (worldZ - halfSize) * scale;
 
                     let j = ((tileZ * tileSize + z) * worldSize1 + tileX * tileSize + x) * 3;

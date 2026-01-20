@@ -2,9 +2,10 @@ import { MathUtils } from "three";
 import { allVisible, axesVisible, changeShowAll, cpuVisible, debugging, fpsVisible, memVisible, posVisible, showAll, showAxes, showCpu, showFps, showMem, showPos } from "./Debug.js";
 import { KeyCodes, keysJustPressed } from "./Input.js";
 import { SetAntialias, SetFOV, SetResolution, antialias, body, fov, resMult } from "./Scene.js";
-import { SetLookSensitivityMultiplier, changeDownState, changeUpState, setTouchControls, touchControls } from "./Control.js";
+import { SetLookSensitivityMultiplier, changeDownState, changeUpState, setTouchControls, touchControls, toggleCameraMode, isWebPageMode } from "./Control.js";
 import { time } from "./Time.js";
-import { spotLightDistance, spotLightDistanceUniform } from "../materials/OceanMaterial.js";
+import { spotLightDistance, spotLightDistanceUniform, SetOceanColor } from "../materials/OceanMaterial.js";
+import { toggleDayNight, isDayTime } from "../scene/Skybox.js";
 
 export const controlsDiv1 = document.createElement("info");
 
@@ -19,6 +20,12 @@ let history = new Array();
 
 export function Start()
 {   
+    // Name display on top left
+    const nameDisplay = document.createElement("div");
+    nameDisplay.className = "name-display";
+    nameDisplay.textContent = "LEO SATO";
+    body.appendChild(nameDisplay);
+
     const overlay = document.createElement("overlay");
     overlay.className = "hidden";
     body.appendChild(overlay);
@@ -26,6 +33,26 @@ export function Start()
     const menuButton = document.createElement("button");
     menuButton.textContent = "Menu";
     body.appendChild(menuButton);
+
+    // Day/Night toggle button on screen
+    const dayNightButton = document.createElement("button");
+    dayNightButton.textContent = isDayTime() ? "☀️ Day" : "🌙 Night";
+    dayNightButton.className = "daynight";
+    dayNightButton.onclick = function() {
+        const isDay = toggleDayNight();
+        dayNightButton.textContent = isDay ? "☀️ Day" : "🌙 Night";
+    };
+    body.appendChild(dayNightButton);
+
+    // Camera mode toggle button on screen
+    const cameraModeButton = document.createElement("button");
+    cameraModeButton.textContent = isWebPageMode() ? "📜 Scroll" : "🎮 Free";
+    cameraModeButton.className = "cameramode";
+    cameraModeButton.onclick = function() {
+        const isWebPage = toggleCameraMode();
+        cameraModeButton.textContent = isWebPage ? "📜 Scroll" : "🎮 Free";
+    };
+    body.appendChild(cameraModeButton);
 
     function newOverlayDiv(show)
     {
@@ -458,6 +485,31 @@ export function Start()
         SetAntialias(!antialias);
         antialiasIn.Change(antialias);
     }
+
+    // Ocean color picker
+    const oceanColorDiv = document.createElement("inputDiv");
+    videoDiv.appendChild(oceanColorDiv);
+
+    const oceanColorLabel = document.createElement("div");
+    oceanColorLabel.textContent = "Ocean color: ";
+    oceanColorDiv.appendChild(oceanColorLabel);
+
+    const oceanColorInput = document.createElement("input");
+    oceanColorInput.type = "color";
+    oceanColorInput.value = "#1a7aa8"; // Default blueish ocean color
+    oceanColorInput.style.width = "100%";
+    oceanColorInput.style.height = "32px";
+    oceanColorInput.style.border = "none";
+    oceanColorInput.style.cursor = "pointer";
+    oceanColorInput.style.marginTop = "4px";
+    oceanColorInput.oninput = function() {
+        const hex = oceanColorInput.value;
+        const r = parseInt(hex.substr(1, 2), 16) / 255;
+        const g = parseInt(hex.substr(3, 2), 16) / 255;
+        const b = parseInt(hex.substr(5, 2), 16) / 255;
+        SetOceanColor(r, g, b);
+    };
+    oceanColorDiv.appendChild(oceanColorInput);
 
     newButton("Back", videoDiv, settingsDiv, true);
     //#endregion

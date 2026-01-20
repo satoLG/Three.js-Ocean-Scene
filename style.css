@@ -7,6 +7,20 @@ body
     user-select: none;
 }
 
+.name-display
+{
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 1;
+    font-size: 18px;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.8), 0 2px 4px rgba(0, 0, 0, 0.5);
+    letter-spacing: 2px;
+    pointer-events: none;
+}
+
 button
 {
     appearance: none;
@@ -51,6 +65,30 @@ body > div > button
     width: 48px;
     height: 32px;
     border-radius: 6px;
+}
+
+button.daynight
+{
+    position: fixed;
+    z-index: 1;
+    top: 52px;
+    right: 12px;
+    width: 72px;
+    height: 32px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+button.cameramode
+{
+    position: fixed;
+    z-index: 1;
+    top: 92px;
+    right: 12px;
+    width: 72px;
+    height: 32px;
+    border-radius: 6px;
+    font-size: 14px;
 }
 
 button.up, button.down
