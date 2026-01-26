@@ -9,6 +9,7 @@ body
 
 .name-display
 {
+    font-family: monospace;    
     position: fixed;
     top: 12px;
     left: 12px;
@@ -16,7 +17,7 @@ body
     font-size: 18px;
     font-weight: 700;
     color: white;
-    text-shadow: 0 0 8px rgba(0, 0, 0, 0.8), 0 2px 4px rgba(0, 0, 0, 0.5);
+    /* text-shadow: 0 0 8px rgba(0, 0, 0, 0.8), 0 2px 4px rgba(0, 0, 0, 0.5); */
     letter-spacing: 2px;
     pointer-events: none;
 }

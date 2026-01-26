@@ -1,36 +1,43 @@
 import { BufferAttribute, BufferGeometry, Mesh, PlaneGeometry } from "three";
 import * as oceanMaterials from "../materials/OceanMaterial.js";
-import { camera } from "../scripts/Scene.js";
 
 export const surface = new Mesh();
 export const volume = new Mesh();
+
+// Ocean dimensions - sized to cover view from scroll camera
+// Camera at (0, Y, 0) looking down -Z axis
+const oceanWidth = 400;   // X axis (left-right from camera view)
+const oceanDepth = 400;   // Z axis (forward from camera - along -Z)
+const oceanVolumeDepth = 100; // How deep underwater
 
 export function Start()
 {
     oceanMaterials.Start();
 
-    const halfSize = 1500;
-    const depth = 1000;
-
-    // Use PlaneGeometry with subdivisions for vertex displacement waves
-    // 64 segments = 65x65 = 4,225 vertices - enough for visible horizon waves
-    const surfaceGeometry = new PlaneGeometry(halfSize * 2, halfSize * 2, 64, 64);
-    surfaceGeometry.rotateX(-Math.PI / 2); // Rotate to be horizontal (XZ plane)
+    // Create surface geometry
+    // PlaneGeometry creates a plane on XY, we rotate to XZ
+    // High segment count for smooth vertex displacement waves
+    const surfaceGeometry = new PlaneGeometry(oceanWidth, oceanDepth, 512, 512);
+    surfaceGeometry.rotateX(-Math.PI / 2); // Now on XZ plane
 
     surface.geometry = surfaceGeometry;
     surface.material = oceanMaterials.surface;
 
+    const halfWidth = oceanWidth / 2;
+    const halfDepth = oceanDepth / 2;
+
+    // Volume box - underwater area
     const volumeVertices = new Float32Array
     ([
-        -halfSize, -depth, -halfSize,
-        halfSize, -depth, -halfSize,
-        -halfSize, -depth, halfSize,
-        halfSize, -depth, halfSize,
+        -halfWidth, -oceanVolumeDepth, -halfDepth,
+        halfWidth, -oceanVolumeDepth, -halfDepth,
+        -halfWidth, -oceanVolumeDepth, halfDepth,
+        halfWidth, -oceanVolumeDepth, halfDepth,
 
-        -halfSize, 0, -halfSize,
-        halfSize, 0, -halfSize,
-        -halfSize, 0, halfSize,
-        halfSize, 0, halfSize
+        -halfWidth, 0, -halfDepth,
+        halfWidth, 0, -halfDepth,
+        -halfWidth, 0, halfDepth,
+        halfWidth, 0, halfDepth
     ]);
 
     const volumeIndices = 
@@ -51,9 +58,13 @@ export function Start()
 
     volume.parent = surface;
     surface.add(volume);
+    
+    // Position ocean in front of camera (camera looks along -Z)
+    // Ocean center at Z = -halfDepth so back edge is at Z = 0 (where camera is)
+    surface.position.set(0, 0, -halfDepth);
 }
 
 export function Update()
 {   
-    surface.position.set(camera.position.x, 0, camera.position.z);
+    // Ocean is static - no need to follow camera
 }

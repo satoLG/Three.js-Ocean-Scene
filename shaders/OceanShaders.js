@@ -6,31 +6,14 @@ export const surfaceVertex =
     varying vec2 _uv;
     varying float _elevation;
 
-    // Wave parameters - for waterline undulation near camera
-    const float uBigWavesElevation = 0.01;
-    const vec2 uBigWavesFrequency = vec2(0.08, 0.1);  // Higher = more waves visible
-    const float uBigWavesSpeed = 0.2;
-    const float uWaveFadeStart = 50.0;   // Distance where waves start fading
-    const float uWaveFadeEnd = 200.0;    // Distance where waves are completely gone
-
     void main()
     {
         vec4 worldPos = modelMatrix * vec4(position, 1.0);
         
-        // Calculate distance from camera (horizontal only)
-        float distFromCamera = length(worldPos.xz - cameraPosition.xz);
-        
-        // Fade out waves based on distance (1.0 near, 0.0 far)
-        float waveFade = 1.0 - clamp((distFromCamera - uWaveFadeStart) / (uWaveFadeEnd - uWaveFadeStart), 0.0, 1.0);
-        
-        // Calculate wave elevation - just big waves for waterline undulation
-        float elevation = sin(worldPos.x * uBigWavesFrequency.x + _Time * uBigWavesSpeed) *
-                          sin(worldPos.z * uBigWavesFrequency.y + _Time * uBigWavesSpeed) * uBigWavesElevation * waveFade;
-
-        worldPos.y += elevation;
+        float elevation = 0.0;
         
         _worldPos = worldPos.xz;
-        _uv = _worldPos * NORMAL_MAP_SCALE;
+        _uv = _worldPos * _NormalMapScale;
         _elevation = elevation;
         gl_Position = projectionMatrix * viewMatrix * worldPos;
     }
@@ -40,19 +23,36 @@ export const surfaceFragment =
 /*glsl*/`
     #include <ocean>
 
+    uniform vec2 _OceanHalfSize;
+    uniform float _EdgeFadeDistance;
+
     varying vec2 _worldPos;
     varying vec2 _uv;
     varying float _elevation;
 
+    float calcEdgeFade(vec2 pos) {
+        // Camera is at Z=0, ocean extends into negative Z
+        // pos.y is world Z coordinate
+        // Near edge (close to camera) is at Z=0, so distance from near edge is -pos.y
+        float distFromNearEdge = -pos.y;
+        
+        // Smooth fade - transparent at edge (Z=0), opaque further in
+        return smoothstep(0.0, _EdgeFadeDistance, distFromNearEdge);
+    }
+
     void main()
     {
+        // Calculate edge fade
+        float edgeFade = calcEdgeFade(_worldPos);
+        if (edgeFade <= 0.0) discard;
+
         vec3 viewVec = vec3(_worldPos.x, _elevation, _worldPos.y) - cameraPosition;
         float viewLen = length(viewVec);
         vec3 viewDir = viewVec / viewLen;
 
-        vec3 normal = texture2D(_NormalMap1, _uv + VELOCITY_1 * _Time).xyz * 2.0 - 1.0;
-        normal += texture2D(_NormalMap2, _uv + VELOCITY_2 * _Time).xyz * 2.0 - 1.0;
-        normal *= NORMAL_MAP_STRENGTH;
+        vec3 normal = texture2D(_NormalMap1, _uv + _WaveVelocity1 * _Time).xyz * 2.0 - 1.0;
+        normal += texture2D(_NormalMap2, _uv + _WaveVelocity2 * _Time).xyz * 2.0 - 1.0;
+        normal *= _NormalMapStrength;
         normal += vec3(0.0, 0.0, 1.0);
         normal = normalize(normal).xzy;
 
@@ -60,20 +60,15 @@ export const surfaceFragment =
 
         if (cameraPosition.y > _elevation)
         {
-            vec3 halfWayDir = normalize(_DirToLight - viewDir);
-            float specular = max(0.0, dot(normal, halfWayDir));
-            specular = pow(specular, SPECULAR_SHARPNESS) * _SpecularVisibility;
-
             float reflectivity = pow2(1.0 - max(0.0, dot(-viewDir, normal)));
 
             vec3 reflection = sampleSkybox(reflect(viewDir, normal));
             vec3 surface = reflectivity * reflection;
-            surface = max(surface, specular);
 
             float fog = clamp(viewLen / FOG_DISTANCE + dither, 0.0, 1.0);
             surface = mix(surface, sampleFog(viewDir), fog);
 
-            gl_FragColor = vec4(surface, max(max(reflectivity, specular), fog));
+            gl_FragColor = vec4(surface, max(reflectivity, fog) * edgeFade);
             return;
         }
 
@@ -93,11 +88,11 @@ export const surfaceFragment =
             vec3 rColor = exp((sampleY - MAX_VIEW_DEPTH_DENSITY) * _Absorption);
             rColor *= _Light;
 
-            gl_FragColor = vec4(mix(rColor, light, t), 1.0);
+            gl_FragColor = vec4(mix(rColor, light, t), edgeFade);
             return;
         }
 
-        gl_FragColor = vec4(light, t);
+        gl_FragColor = vec4(light, t * edgeFade);
     }
 `;
 

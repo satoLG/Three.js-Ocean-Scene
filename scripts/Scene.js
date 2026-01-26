@@ -1,11 +1,17 @@
-import { PerspectiveCamera, Scene, Vector3, WebGLRenderer } from "three";
+import { AmbientLight, DirectionalLight, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from "three";
 import * as Skybox from "../scene/Skybox.js";
 import * as Ocean from "../scene/Ocean.js";
 import * as SeaFloor from "../scene/SeaFloor.js";
 import * as Blocks from "../scene/Blocks.js";
+import * as Island from "../scene/Island.js";
 import { axes } from "./Debug.js";
+import { lightUniform, sunVisibilityUniform } from "../materials/SkyboxMaterial.js";
 
 export const body = document.createElement("div");
+
+// Scene lights - synced with skybox
+let ambientLight;
+let directionalLight;
 
 export const renderer = new WebGLRenderer();
 export const scene = new Scene();
@@ -71,7 +77,8 @@ export function Start()
     camera.near = 0.3;
     camera.far = 4000;
     camera.updateProjectionMatrix();
-    camera.position.set(0, 50, 0);  // Start at top position for web page mode
+    // Position set by Control.js in web page mode
+    camera.position.set(50, 50, 0);
 
     UpdateCameraRotation();
 
@@ -101,6 +108,14 @@ export function Start()
     Skybox.Start();
     scene.add(Skybox.skybox);
 
+    // Add lighting for 3D models - synced with skybox
+    ambientLight = new AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+    
+    directionalLight = new DirectionalLight(0xffffff, 1.0);
+    directionalLight.position.copy(Skybox.dirToLight).multiplyScalar(100);
+    scene.add(directionalLight);
+
     Ocean.Start();
     scene.add(Ocean.surface);
 
@@ -109,6 +124,11 @@ export function Start()
     {
         scene.add(SeaFloor.tiles[i]);
     }
+
+    // Load island and firecamp models
+    Island.Start();
+    scene.add(Island.island);
+    scene.add(Island.firecamp);
 
     // Blocks.Start();
     // for (let i = 0; i < Blocks.blocks.length; i++)
@@ -122,6 +142,16 @@ export function Update()
     Skybox.Update();
     Ocean.Update();
     SeaFloor.Update();
+    Island.Update();
+
+    // Sync lights with skybox sun position and intensity
+    directionalLight.position.copy(Skybox.dirToLight).multiplyScalar(100);
+    const sunVisible = sunVisibilityUniform.value; // 0 when sun hidden, 1 when fully visible
+    const lightIntensity = lightUniform.value.x;
+    // Directional light only active when sun is visible
+    directionalLight.intensity = sunVisible * lightIntensity * 2.0;
+    // Ambient stays very dim at night
+    ambientLight.intensity = 0.05 + sunVisible * lightIntensity * 0.5;
 
     renderer.render(scene, camera);
     renderer.render(axes, staticCamera);

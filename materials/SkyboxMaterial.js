@@ -1,6 +1,6 @@
 import { DataTexture, MathUtils, RepeatWrapping, ShaderMaterial, TextureLoader, Uniform, Vector2, Vector3 } from "three";
 import { fragment, vertex } from "../shaders/SkyboxShader.js";
-import { dirToLight, dirToMoon, rotationMatrix, moonRotationMatrix } from "../scene/Skybox.js";
+import { dirToLight, rotationMatrix } from "../scene/Skybox.js";
 import { Random } from "../scripts/Random.js";
 
 export const material = new ShaderMaterial();
@@ -19,9 +19,9 @@ const maxOffset = 0.43;
 const starsMap = new Uint8Array(gridSize * gridSize * 24);
 const stars = new Uniform();
 
-const specularVisibility = new Uniform(Math.sqrt(sunVisibility.value));
-const moonVisibility = new Uniform(0);
-const light = new Uniform(new Vector3(1, 1, 1));
+// Export light and sunVisibility for use by other modules (like Island.js)
+export const lightUniform = new Uniform(new Vector3(1, 1, 1));
+export const sunVisibilityUniform = sunVisibility;
 
 const up = new Vector3(0, 1, 0);
 
@@ -134,7 +134,6 @@ export function Start()
     SetSkyboxUniforms = function(material)
     {
         material.uniforms._SkyRotationMatrix = rotationMatrix;
-        material.uniforms._MoonRotationMatrix = moonRotationMatrix;
         material.uniforms._DitherTexture = dither;
         material.uniforms._DitherTextureSize = ditherSize;
         material.uniforms._SunVisibility = sunVisibility;
@@ -143,11 +142,8 @@ export function Start()
         material.uniforms._GridSize = new Uniform(gridSize);
         material.uniforms._GridSizeScaled = new Uniform(gridSize * 6);
         material.uniforms._Stars = stars;
-        material.uniforms._SpecularVisibility = specularVisibility;
         material.uniforms._DirToLight = new Uniform(dirToLight);
-        material.uniforms._DirToMoon = new Uniform(dirToMoon);
-        material.uniforms._MoonVisibility = moonVisibility;
-        material.uniforms._Light = light;
+        material.uniforms._Light = lightUniform;
     }
     SetSkyboxUniforms(material);
 }
@@ -158,12 +154,7 @@ export function Update()
     sunVisibility.value = MathUtils.clamp((intensity + 0.1) * 2, 0, 1);
     twilightTime.value = MathUtils.clamp((intensity + 0.1) * 3, 0, 1);
     twilightVisibility.value = 1 - Math.min(Math.abs(intensity * 3), 1);
-    specularVisibility.value = Math.sqrt(sunVisibility.value);
-    
-    // Moon visibility based on moon direction (visible when pointing up)
-    const moonIntensity = dirToMoon.dot(up);
-    moonVisibility.value = MathUtils.clamp(moonIntensity * 2, 0, 1) * (1 - sunVisibility.value);
     
     l = Math.min(sunVisibility.value + 0.333, 1);
-    light.value.set(l, l, l);
+    lightUniform.value.set(l, l, l);
 }

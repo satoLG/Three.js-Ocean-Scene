@@ -4,7 +4,7 @@ import { KeyCodes, keysJustPressed } from "./Input.js";
 import { SetAntialias, SetFOV, SetResolution, antialias, body, fov, resMult } from "./Scene.js";
 import { SetLookSensitivityMultiplier, changeDownState, changeUpState, setTouchControls, touchControls, toggleCameraMode, isWebPageMode } from "./Control.js";
 import { time } from "./Time.js";
-import { spotLightDistance, spotLightDistanceUniform, SetOceanColor } from "../materials/OceanMaterial.js";
+import { spotLightDistance, spotLightDistanceUniform, SetOceanColor, bigWavesElevationUniform, bigWavesFrequencyUniform, bigWavesSpeedUniform, smallWavesElevationUniform, smallWavesFrequencyUniform, smallWavesSpeedUniform, smallIterationsUniform, normalMapScaleUniform, normalMapStrengthUniform, waveVelocity1Uniform, waveVelocity2Uniform } from "../materials/OceanMaterial.js";
 import { toggleDayNight, isDayTime } from "../scene/Skybox.js";
 
 export const controlsDiv1 = document.createElement("info");
@@ -507,7 +507,8 @@ export function Start()
         const r = parseInt(hex.substr(1, 2), 16) / 255;
         const g = parseInt(hex.substr(3, 2), 16) / 255;
         const b = parseInt(hex.substr(5, 2), 16) / 255;
-        SetOceanColor(r, g, b);
+        // SetOceanColor(r, g, b);
+        SetOceanColor(0.1, 0.3, 0.8);
     };
     oceanColorDiv.appendChild(oceanColorInput);
 
@@ -576,6 +577,81 @@ export function Start()
         showMemIn.Change(showAll);
         showPosIn.Change(showAll);
         showAxesIn.Change(showAll);
+    }
+
+    // Wave debug controls - Big Waves
+    const bigWaveElevationIn = new Range("Big Wave Elevation: ", debugDiv, 0, 2, 0.05, bigWavesElevationUniform.value, "");
+    bigWaveElevationIn.element.oninput = function() {
+        bigWavesElevationUniform.value = parseFloat(bigWaveElevationIn.element.value);
+        bigWaveElevationIn.Update();
+    }
+
+    const bigWaveFreqXIn = new Range("Big Wave Freq X: ", debugDiv, 0.1, 10, 0.1, bigWavesFrequencyUniform.value.x, "");
+    bigWaveFreqXIn.element.oninput = function() {
+        bigWavesFrequencyUniform.value.x = parseFloat(bigWaveFreqXIn.element.value);
+        bigWaveFreqXIn.Update();
+    }
+
+    const bigWaveFreqYIn = new Range("Big Wave Freq Y: ", debugDiv, 0.1, 10, 0.1, bigWavesFrequencyUniform.value.y, "");
+    bigWaveFreqYIn.element.oninput = function() {
+        bigWavesFrequencyUniform.value.y = parseFloat(bigWaveFreqYIn.element.value);
+        bigWaveFreqYIn.Update();
+    }
+
+    const bigWaveSpeedIn = new Range("Big Wave Speed: ", debugDiv, 0, 3, 0.1, bigWavesSpeedUniform.value, "");
+    bigWaveSpeedIn.element.oninput = function() {
+        bigWavesSpeedUniform.value = parseFloat(bigWaveSpeedIn.element.value);
+        bigWaveSpeedIn.Update();
+    }
+
+    // Wave debug controls - Small Waves (Perlin)
+    const smallWaveElevationIn = new Range("Small Wave Elevation: ", debugDiv, 0, 1, 0.01, smallWavesElevationUniform.value, "");
+    smallWaveElevationIn.element.oninput = function() {
+        smallWavesElevationUniform.value = parseFloat(smallWaveElevationIn.element.value);
+        smallWaveElevationIn.Update();
+    }
+
+    const smallWaveFreqIn = new Range("Small Wave Freq: ", debugDiv, 0.1, 10, 0.1, smallWavesFrequencyUniform.value, "");
+    smallWaveFreqIn.element.oninput = function() {
+        smallWavesFrequencyUniform.value = parseFloat(smallWaveFreqIn.element.value);
+        smallWaveFreqIn.Update();
+    }
+
+    const smallWaveSpeedIn = new Range("Small Wave Speed: ", debugDiv, 0, 1, 0.01, smallWavesSpeedUniform.value, "");
+    smallWaveSpeedIn.element.oninput = function() {
+        smallWavesSpeedUniform.value = parseFloat(smallWaveSpeedIn.element.value);
+        smallWaveSpeedIn.Update();
+    }
+
+    const smallIterationsIn = new Range("Small Wave Iterations: ", debugDiv, 1, 8, 1, smallIterationsUniform.value, "");
+    smallIterationsIn.element.oninput = function() {
+        smallIterationsUniform.value = parseFloat(smallIterationsIn.element.value);
+        smallIterationsIn.Update();
+    }
+
+    // Small wave (normal map) debug controls
+    const normalMapScaleIn = new Range("Small Wave Scale: ", debugDiv, 0.01, 0.5, 0.01, normalMapScaleUniform.value, "");
+    normalMapScaleIn.element.oninput = function() {
+        normalMapScaleUniform.value = parseFloat(normalMapScaleIn.element.value);
+        normalMapScaleIn.Update();
+    }
+
+    const normalMapStrengthIn = new Range("Small Wave Strength: ", debugDiv, 0, 1, 0.05, normalMapStrengthUniform.value, "");
+    normalMapStrengthIn.element.oninput = function() {
+        normalMapStrengthUniform.value = parseFloat(normalMapStrengthIn.element.value);
+        normalMapStrengthIn.Update();
+    }
+
+    const waveVel1In = new Range("Small Wave Speed 1: ", debugDiv, 0, 0.5, 0.01, waveVelocity1Uniform.value.x, "");
+    waveVel1In.element.oninput = function() {
+        waveVelocity1Uniform.value.x = parseFloat(waveVel1In.element.value);
+        waveVel1In.Update();
+    }
+
+    const waveVel2In = new Range("Small Wave Speed 2: ", debugDiv, 0, 0.5, 0.01, waveVelocity2Uniform.value.y, "");
+    waveVel2In.element.oninput = function() {
+        waveVelocity2Uniform.value.y = parseFloat(waveVel2In.element.value);
+        waveVel2In.Update();
     }
 
     newButton("Back", debugDiv, settingsDiv, true);

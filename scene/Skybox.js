@@ -5,13 +5,7 @@ import { camera } from "../scripts/Scene.js";
 
 export const skybox = new Mesh();
 export const dirToLight = new Vector3();
-export const dirToMoon = new Vector3();
 export const rotationMatrix = new Uniform(new Matrix3());
-export const moonRotationMatrix = new Uniform(new Matrix3());
-
-// Moon offset from sun (in radians). 180° = opposite side, 90° = perpendicular
-// Smaller value = moon closer to sun on the same arc
-const moonOffset = Math.PI * 0.6;  // ~108° offset (adjust this to move moon closer/further from sun)
 
 const halfSize = 2000;
 const speed = 0.05;
@@ -21,9 +15,9 @@ const axis = new Vector3(0, 0, 1).applyAxisAngle(new Vector3(0, 1, 0), MathUtils
 let angle = -1;
 
 // Day/Night toggle system
-// Angles adjusted so sun/moon are visible from the fixed camera direction (looking at twilight zone)
-const dayAngle = Math.PI * 0.35;       // Sun visible above horizon in twilight direction
-const nightAngle = Math.PI * 0.75;     // Moon visible above horizon in twilight direction
+// Angles for day/night sky states
+const dayAngle = Math.PI * 0.35;       // Day sky angle
+const nightAngle = Math.PI * 0.75;     // Night sky angle
 let targetAngle = dayAngle;            // Target angle to reach
 let isTransitioning = false;           // Whether we're transitioning to a target
 let isDay = true;                      // Current state
@@ -51,18 +45,6 @@ function setSkyRotationMatrix(angle)
         cos + u2.x * cos1,              u.x * u.y * cos1 - u.z * sin,   u.x * u.z * cos1 + u.y * sin,
         u.y * u.x * cos1 + u.z * sin,   cos + u2.y * cos1,              u.y * u.z * cos1 - u.x * sin,
         u.z * u.x * cos1 - u.y * sin,   u.z * u.y * cos1 + u.x * sin,   cos + u2.z * cos1
-    );
-    
-    // Moon rotation matrix with offset
-    const moonAngle = angle + moonOffset;
-    const cosM = Math.cos(moonAngle);
-    const cos1M = 1 - cosM;
-    const sinM = Math.sin(moonAngle);
-    moonRotationMatrix.value.set
-    (
-        cosM + u2.x * cos1M,              u.x * u.y * cos1M - u.z * sinM,   u.x * u.z * cos1M + u.y * sinM,
-        u.y * u.x * cos1M + u.z * sinM,   cosM + u2.y * cos1M,              u.y * u.z * cos1M - u.x * sinM,
-        u.z * u.x * cos1M - u.y * sinM,   u.z * u.y * cos1M + u.x * sinM,   cosM + u2.z * cos1M
     );
 }
 
@@ -109,11 +91,6 @@ export function Start()
     initial.applyMatrix3(rotationMatrix.value);
     dirToLight.set(-initial.x, initial.y, -initial.z);
     initial.set(0, 1, 0);
-    
-    // Calculate moon direction
-    initial.applyMatrix3(moonRotationMatrix.value);
-    dirToMoon.set(-initial.x, -initial.y, -initial.z);
-    initial.set(0, 1, 0);
 }
 
 export function Update()
@@ -137,11 +114,6 @@ export function Update()
     setSkyRotationMatrix(angle);
     initial.applyMatrix3(rotationMatrix.value);
     dirToLight.set(-initial.x, initial.y, -initial.z);
-    initial.set(0, 1, 0);
-    
-    // Update moon direction
-    initial.applyMatrix3(moonRotationMatrix.value);
-    dirToMoon.set(-initial.x, -initial.y, -initial.z);
     initial.set(0, 1, 0);
     
     skyboxMaterial.Update();

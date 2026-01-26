@@ -34,7 +34,26 @@ const triplanarScale = 1;
 
 // Ocean color absorption - higher values = more absorption (less of that color visible)
 // Lower values = brighter ocean. Original was vec3(0.1, 0.025, 0.01)
-export const oceanAbsorptionUniform = new Uniform(new Vector3(0.06, 0.015, 0.006));
+export const oceanAbsorptionUniform = new Uniform(new Vector3(0.085, 0.022, 0.015));
+
+// Wave parameters - Perlin noise based
+export const bigWavesElevationUniform = new Uniform(0.2);
+export const bigWavesFrequencyUniform = new Uniform({ x: 4.0, y: 1.5 });
+export const bigWavesSpeedUniform = new Uniform(0.75);
+export const smallWavesElevationUniform = new Uniform(0.03);
+export const smallWavesFrequencyUniform = new Uniform(3.0);
+export const smallWavesSpeedUniform = new Uniform(0.2);
+export const smallIterationsUniform = new Uniform(2.0);
+
+// Small wave (normal map) parameters
+export const normalMapScaleUniform = new Uniform(0.15);
+export const normalMapStrengthUniform = new Uniform(0.85);
+export const waveVelocity1Uniform = new Uniform({ x: 0.025, y: 0.0 });
+export const waveVelocity2Uniform = new Uniform({ x: 0.0, y: 0.025 });
+
+// Edge fade parameters (ocean size and fade distance)
+export const oceanHalfSizeUniform = new Uniform({ x: 200.0, y: 200.0 }); // halfWidth, halfDepth
+export const edgeFadeDistanceUniform = new Uniform(10.0); // Distance from edge where fade starts
 
 export function SetOceanColor(r, g, b) {
     // Invert color to absorption: bright color component = low absorption of that color
@@ -43,11 +62,12 @@ export function SetOceanColor(r, g, b) {
     const maxAbs = 0.08;
     const range = maxAbs - minAbs;
     
-    oceanAbsorptionUniform.value.set(
-        maxAbs - r * range,  // High r = low red absorption = more red visible
-        maxAbs - g * range,  // High g = low green absorption = more green visible
-        maxAbs - b * range   // High b = low blue absorption = more blue visible
-    );
+    oceanAbsorptionUniform.value.set(0.005, 0.005, 0.1);
+    // oceanAbsorptionUniform.value.set(
+    //     maxAbs - r * range,  // High r = low red absorption = more red visible
+    //     maxAbs - g * range,  // High g = low green absorption = more green visible
+    //     maxAbs - b * range   // High b = low blue absorption = more blue visible
+    // );
 }
 
 export function Start()
@@ -62,7 +82,20 @@ export function Start()
         _Time: timeUniform,
         _NormalMap1: normalMap1,
         _NormalMap2: normalMap2,
-        _Absorption: oceanAbsorptionUniform
+        _Absorption: oceanAbsorptionUniform,
+        uBigWavesElevation: bigWavesElevationUniform,
+        uBigWavesFrequency: bigWavesFrequencyUniform,
+        uBigWavesSpeed: bigWavesSpeedUniform,
+        uSmallWavesElevation: smallWavesElevationUniform,
+        uSmallWavesFrequency: smallWavesFrequencyUniform,
+        uSmallWavesSpeed: smallWavesSpeedUniform,
+        uSmallIterations: smallIterationsUniform,
+        _NormalMapScale: normalMapScaleUniform,
+        _NormalMapStrength: normalMapStrengthUniform,
+        _WaveVelocity1: waveVelocity1Uniform,
+        _WaveVelocity2: waveVelocity2Uniform,
+        _OceanHalfSize: oceanHalfSizeUniform,
+        _EdgeFadeDistance: edgeFadeDistanceUniform
     };
     SetSkyboxUniforms(surface);
     

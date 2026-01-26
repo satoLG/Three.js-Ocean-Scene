@@ -1,24 +1,28 @@
 import { BufferAttribute, BufferGeometry, MathUtils, Mesh, Vector2, Vector3 } from "three";
 import * as oceanMaterials from "../materials/OceanMaterial.js";
 import { Random } from "../scripts/Random.js";
-import { camera } from "../scripts/Scene.js";
 
-const tilesPerAxis = 32;
+// Match ocean dimensions (400x400)
+const tilesPerAxis = 13;
 const tileSize = 32;
-const tilesRadius = MathUtils.clamp(8, 1, tilesPerAxis / 2);
+const tilesRadius = MathUtils.clamp(4, 1, tilesPerAxis / 2);
 const tileSize1 = tileSize + 1;
 const worldSize = tilesPerAxis * tileSize;
 const worldSize1 = worldSize + 1;
 const scale = 1;
 const halfSize = tilesPerAxis * tileSize * 0.5 * scale;
 
-const base1 = new Vector2(0.003, 15);
+// Offset to position floor to match ocean (ocean at Z = -halfDepth)
+const floorOffsetX = 0;
+const floorOffsetZ = -200;
+
+const base1 = new Vector2(0.003, -5);
 const base2 = new Vector2(0.008, 0.1);
 const base3 = new Vector2(0.02, 0.05);
 
-const erosion = new Vector3(0.008, 0.02, 0.1);
+const erosion = new Vector3(0.001, 0.01, 0.1);
 
-const hill = new Vector2(0.03, 0);
+const hill = new Vector2(0.01, 0);
 
 const reliefPoints = 
 [
@@ -195,9 +199,9 @@ export function Start()
                     let worldX = x + tileX * tileSize;
                     let worldZ = z + tileZ * tileSize;
 
-                    vertices[i] = (worldX - halfSize) * scale;
+                    vertices[i] = (worldX - halfSize) * scale + floorOffsetX;
                     vertices[i + 1] = heights[worldZ * worldSize1 + worldX] * scale - 10;
-                    vertices[i + 2] = (worldZ - halfSize) * scale;
+                    vertices[i + 2] = (worldZ - halfSize) * scale + floorOffsetZ;
 
                     let j = ((tileZ * tileSize + z) * worldSize1 + tileX * tileSize + x) * 3;
 
@@ -226,22 +230,11 @@ let lastTilesIndices = new Array();
 
 export function Update()
 {
-    let playerTile = MathUtils.clamp(Math.round((camera.position.z + halfSize) / tileSize), tilesRadius, tilesPerAxis - tilesRadius) * tilesPerAxis + MathUtils.clamp(Math.round((camera.position.x + halfSize) / tileSize), tilesRadius, tilesPerAxis - tilesRadius);
-
-    for (let i = 0; i < lastTilesIndices.length; i++)
-    {
-        tiles[lastTilesIndices[i]].visible = false;
-    }
-
-    lastTilesIndices = new Array();
-
-    for (let z = -tilesRadius; z < tilesRadius; z++)
-    {
-        for (let x = -tilesRadius; x < tilesRadius; x++)
-        {
-            let i = playerTile + z * tilesPerAxis + x;
-            lastTilesIndices.push(i);
+    // Make all tiles in the smaller area visible - no camera-based culling needed
+    if (lastTilesIndices.length === 0) {
+        for (let i = 0; i < tiles.length; i++) {
             tiles[i].visible = true;
+            lastTilesIndices.push(i);
         }
     }
 }

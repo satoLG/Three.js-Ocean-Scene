@@ -18,11 +18,6 @@ const skybox =
     const vec3 NIGHT_SKY_COLOR = vec3(0.06, 0.1, 0.15);
     const vec3 NIGHT_HORIZON_COLOR = vec3(0.07, 0.13, 0.18);
 
-    const float SUN_SHARPNESS = 2000.0;
-    const float SUN_SIZE = 5.0;
-    const float MOON_SHARPNESS = 12000.0;
-    const float MOON_SIZE = 5000.0;
-
     const float STARS_SHARPNESS = 50.0;
     const float STARS_SIZE = 10.0;
     const float WIDTH_SCALE = 1.0 / 6.0;
@@ -42,20 +37,16 @@ const skybox =
     const vec3 UP = vec3(0.0, 1.0, 0.0);
 
     uniform mat3 _SkyRotationMatrix;
-    uniform mat3 _MoonRotationMatrix;
 
     uniform sampler2D _DitherTexture;
     uniform vec2 _DitherTextureSize;
     uniform float _SunVisibility;
     uniform float _TwilightTime;
     uniform float _TwilightVisibility;
-    uniform float _MoonVisibility;
     uniform float _GridSize;
     uniform float _GridSizeScaled;
     uniform sampler2D _Stars;
-    uniform float _SpecularVisibility;
     uniform vec3 _DirToLight;
-    uniform vec3 _DirToMoon;
     uniform vec3 _Light;
 
     float dither = 0.0;
@@ -134,16 +125,10 @@ const skybox =
     vec3 sampleSkybox(vec3 dir)
     {
         vec3 viewDir = _SkyRotationMatrix * dir;
-        vec3 moonViewDir = _MoonRotationMatrix * dir;
 
         float density = clamp(pow2(1.0 - max(0.0, dot(dir, UP) + dither)), 0.0, 1.0);
 
         float sunLight = dot(viewDir, UP);
-        float sun = min(pow(max(0.0, sunLight), SUN_SHARPNESS) * SUN_SIZE, 1.0);
-
-        // Moon uses its own rotation matrix (offset from sun)
-        float moonLight = -dot(moonViewDir, UP);
-        float moon = min(pow(max(0.0, moonLight), MOON_SHARPNESS) * MOON_SIZE, 1.0);
 
         vec3 day = mix(DAY_SKY_COLOR, DAY_HORIZON_COLOR, density);
         vec3 twilight = mix(LATE_TWILIGHT_COLOR, EARLY_TWILIGHT_COLOR, _TwilightTime);
@@ -157,11 +142,10 @@ const skybox =
 
         vec2 gridCoords = vec2(cubeCoords.x * _GridSizeScaled, cubeCoords.y * _GridSize);
         vec2 gridCenterCoords = floor(gridCoords) + gridValue.xy;
-        float stars = max(min(pow(1.0 - min(distance(gridCoords, gridCenterCoords), 1.0), STARS_SHARPNESS) * gridValue.z * STARS_SIZE, 1.0), moon);
+        float stars = min(pow(1.0 - min(distance(gridCoords, gridCenterCoords), 1.0), STARS_SHARPNESS) * gridValue.z * STARS_SIZE, 1.0);
         stars *= min(exp(-dot(sky, vec3(1.0)) * STARS_FALLOFF) * STARS_VISIBILITY, 1.0);
 
-        sky = mix(sky, max(STARS_COLORS[int(gridValue.w * 6.0)], vec3(moon)), stars);
-        sky = mix(sky, vec3(1.0), sun);
+        sky = mix(sky, STARS_COLORS[int(gridValue.w * 6.0)], stars);
         
         return sky;
     }
@@ -184,13 +168,7 @@ const ocean =
     #include <global>
     #include <skybox>
 
-    const float NORMAL_MAP_SCALE = 0.1;
-    const float NORMAL_MAP_STRENGTH = 0.2;
-    const vec2 VELOCITY_1 = vec2(0.1, 0.0);
-    const vec2 VELOCITY_2 = vec2(0.0, 0.1);
-    const float SPECULAR_SHARPNESS = 100.0;
-    const float SPECULAR_SIZE = 1.1;
-    const float MAX_VIEW_DEPTH = 100.0;
+    const float MAX_VIEW_DEPTH = 80.0;
     const float DENSITY = 0.35;
     const float MAX_VIEW_DEPTH_DENSITY = MAX_VIEW_DEPTH * DENSITY;
     const float CRITICAL_ANGLE = asin(1.0 / 1.33) / PI_HALF;
@@ -199,6 +177,12 @@ const ocean =
     uniform sampler2D _NormalMap1;
     uniform sampler2D _NormalMap2;
     uniform vec3 _Absorption;
+    
+    // Small wave parameters (normal map based)
+    uniform float _NormalMapScale;
+    uniform float _NormalMapStrength;
+    uniform vec2 _WaveVelocity1;
+    uniform vec2 _WaveVelocity2;
 `;
 
 const parallax = 

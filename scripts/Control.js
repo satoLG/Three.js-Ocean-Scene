@@ -15,8 +15,8 @@ const moveSpeedExpMultiplier = 0;
 let webPageMode = true;  // Start in web page mode
 const webPageTopY = 1;      // Top camera position (above water)
 const webPageBottomY = -8;  // Bottom camera position (near sea floor)
-const scrollSpeed = 0.05;    // How fast scroll moves camera
-const scrollSmooth = 5;      // Smoothing factor
+const scrollSpeed = 0.005;    // How fast scroll moves camera
+const scrollSmooth = 10;      // Smoothing factor
 let targetY = webPageTopY;   // Target Y position
 let currentY = webPageTopY;  // Current Y position (for smoothing)
 
@@ -63,9 +63,9 @@ export function SetLookSensitivityMultiplier(value)
 
 let moving = false;
 let moveVector = new Vector3(0, 0, 0);
-// Fixed camera looking at twilight zone (where sun/moon path crosses horizon)
-let phi = Math.PI * 0.65;  // Look toward the twilight/sunrise-sunset direction
-let tetha = 0.15;          // Slightly above horizon
+// Fixed camera looking 90 degrees left (along -X axis)
+let phi = Math.PI * 2;  // 90 degrees left
+let tetha = 0;          // Level with horizon
 let moveSpeedMultiplier = 1;
 
 class Joystick
@@ -338,7 +338,7 @@ export function Update()
     if (webPageMode) {
         currentY = MathUtils.damp(currentY, targetY, scrollSmooth, deltaTime);
         camera.position.y = currentY;
-        // Keep camera position fixed on X and Z in web page mode
+        // Keep camera at edge of ocean (where surface is fully transparent)
         camera.position.x = 0;
         camera.position.z = 0;
     }

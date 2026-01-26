@@ -1,19 +1,16 @@
 export const vertex =
 /*glsl*/`
     uniform mat3 _SkyRotationMatrix;
-    uniform mat3 _MoonRotationMatrix;
 
     attribute vec3 coord;
 
     varying vec3 _worldPos;
     varying vec3 _coord;
-    varying vec3 _moonCoord;
 
     void main()
     {
         _worldPos = coord;
         _coord = _SkyRotationMatrix * _worldPos;
-        _moonCoord = _MoonRotationMatrix * _worldPos;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
 `;
@@ -24,23 +21,16 @@ export const fragment =
 
     varying vec3 _worldPos;
     varying vec3 _coord;
-    varying vec3 _moonCoord;
 
     void main() 
     {
         vec3 worldDir = normalize(_worldPos);
         vec3 viewDir = normalize(_coord);
-        vec3 moonDir = normalize(_moonCoord);
 
         float dither = (texture2D(_DitherTexture, (gl_FragCoord.xy - vec2(0.5)) / _DitherTextureSize).x - 0.5) * DITHER_STRENGTH;
         float density = clamp(pow2(1.0 - max(0.0, dot(worldDir, UP) + dither)), 0.0, 1.0);
 
         float sunLight = dot(viewDir, UP);
-        float sun = min(pow(max(0.0, sunLight), SUN_SHARPNESS) * SUN_SIZE, 1.0);
-
-        // Moon uses its own rotated direction (offset from sun on the same arc)
-        float moonLight = -dot(moonDir, UP);
-        float moon = min(pow(max(0.0, moonLight), MOON_SHARPNESS) * MOON_SIZE, 1.0);
 
         vec3 day = mix(DAY_SKY_COLOR, DAY_HORIZON_COLOR, density);
         vec3 twilight = mix(LATE_TWILIGHT_COLOR, EARLY_TWILIGHT_COLOR, _TwilightTime);
@@ -54,11 +44,10 @@ export const fragment =
 
         vec2 gridCoords = vec2(cubeCoords.x * _GridSizeScaled, cubeCoords.y * _GridSize);
         vec2 gridCenterCoords = floor(gridCoords) + gridValue.xy;
-        float stars = max(min(pow(1.0 - min(distance(gridCoords, gridCenterCoords), 1.0), STARS_SHARPNESS) * gridValue.z * STARS_SIZE, 1.0), moon);
+        float stars = min(pow(1.0 - min(distance(gridCoords, gridCenterCoords), 1.0), STARS_SHARPNESS) * gridValue.z * STARS_SIZE, 1.0);
         stars *= min(exp(-dot(sky, vec3(1.0)) * STARS_FALLOFF) * STARS_VISIBILITY, 1.0);
 
-        sky = mix(sky, max(STARS_COLORS[int(gridValue.w * 6.0)], vec3(moon)), stars);
-        sky = mix(sky, vec3(1.0), sun);
+        sky = mix(sky, STARS_COLORS[int(gridValue.w * 6.0)], stars);
 
         gl_FragColor = vec4(sky, 1.0);
     }
