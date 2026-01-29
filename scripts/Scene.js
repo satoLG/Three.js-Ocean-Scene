@@ -4,6 +4,7 @@ import * as Ocean from "../scene/Ocean.js";
 import * as SeaFloor from "../scene/SeaFloor.js";
 import * as Blocks from "../scene/Blocks.js";
 import * as Island from "../scene/Island.js";
+import * as Fire from "../scene/Fire.js";
 import { axes } from "./Debug.js";
 import { lightUniform, sunVisibilityUniform } from "../materials/SkyboxMaterial.js";
 
@@ -130,6 +131,10 @@ export function Start()
     scene.add(Island.island);
     scene.add(Island.firecamp);
 
+    // Add fire effect to firecamp
+    Fire.Start();
+    Island.firecamp.add(Fire.fire);
+
     // Blocks.Start();
     // for (let i = 0; i < Blocks.blocks.length; i++)
     // {
@@ -143,6 +148,7 @@ export function Update()
     Ocean.Update();
     SeaFloor.Update();
     Island.Update();
+    Fire.Update();
 
     // Sync lights with skybox sun position and intensity
     directionalLight.position.copy(Skybox.dirToLight).multiplyScalar(100);

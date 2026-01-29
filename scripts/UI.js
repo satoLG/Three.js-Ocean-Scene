@@ -6,6 +6,7 @@ import { SetLookSensitivityMultiplier, changeDownState, changeUpState, setTouchC
 import { time } from "./Time.js";
 import { spotLightDistance, spotLightDistanceUniform, SetOceanColor, bigWavesElevationUniform, bigWavesFrequencyUniform, bigWavesSpeedUniform, smallWavesElevationUniform, smallWavesFrequencyUniform, smallWavesSpeedUniform, smallIterationsUniform, normalMapScaleUniform, normalMapStrengthUniform, waveVelocity1Uniform, waveVelocity2Uniform } from "../materials/OceanMaterial.js";
 import { toggleDayNight, isDayTime } from "../scene/Skybox.js";
+import { toggleIslandTexture, getCurrentTexture } from "../scene/Island.js";
 
 export const controlsDiv1 = document.createElement("info");
 
@@ -30,19 +31,36 @@ export function Start()
     overlay.className = "hidden";
     body.appendChild(overlay);
 
-    const menuButton = document.createElement("button");
-    menuButton.textContent = "Menu";
-    body.appendChild(menuButton);
-
-    // Day/Night toggle button on screen
-    const dayNightButton = document.createElement("button");
-    dayNightButton.textContent = isDayTime() ? "☀️ Day" : "🌙 Night";
-    dayNightButton.className = "daynight";
-    dayNightButton.onclick = function() {
-        const isDay = toggleDayNight();
-        dayNightButton.textContent = isDay ? "☀️ Day" : "🌙 Night";
-    };
-    body.appendChild(dayNightButton);
+    // Sun/Moon animated toggle switch (replaces menu and day/night buttons)
+    const switchLabel = document.createElement("label");
+    switchLabel.className = "switch";
+    switchLabel.innerHTML = `
+        <input class="switch__input" type="checkbox" role="switch" />
+        <span class="switch__icon">
+            <span class="switch__icon-part switch__icon-part--1"></span>
+            <span class="switch__icon-part switch__icon-part--2"></span>
+            <span class="switch__icon-part switch__icon-part--3"></span>
+            <span class="switch__icon-part switch__icon-part--4"></span>
+            <span class="switch__icon-part switch__icon-part--5"></span>
+            <span class="switch__icon-part switch__icon-part--6"></span>
+            <span class="switch__icon-part switch__icon-part--7"></span>
+            <span class="switch__icon-part switch__icon-part--8"></span>
+            <span class="switch__icon-part switch__icon-part--9"></span>
+            <span class="switch__icon-part switch__icon-part--10"></span>
+            <span class="switch__icon-part switch__icon-part--11"></span>
+        </span>
+        <span class="switch__sr">Dark Mode</span>
+    `;
+    body.appendChild(switchLabel);
+    
+    // Get the checkbox input and sync with day/night
+    const switchInput = switchLabel.querySelector('.switch__input');
+    // Set initial state (unchecked = day/sun, checked = night/moon)
+    switchInput.checked = !isDayTime();
+    
+    switchInput.addEventListener('change', function() {
+        toggleDayNight();
+    });
 
     // Camera mode toggle button on screen
     const cameraModeButton = document.createElement("button");
@@ -52,7 +70,17 @@ export function Start()
         const isWebPage = toggleCameraMode();
         cameraModeButton.textContent = isWebPage ? "📜 Scroll" : "🎮 Free";
     };
-    body.appendChild(cameraModeButton);
+    // body.appendChild(cameraModeButton);
+
+    // Island texture toggle button
+    const textureButton = document.createElement("button");
+    textureButton.textContent = getCurrentTexture() === 'sand' ? "🏖️ Sand" : "🧱 Concrete";
+    textureButton.className = "islandtexture";
+    textureButton.onclick = function() {
+        const newTexture = toggleIslandTexture();
+        textureButton.textContent = newTexture === 'sand' ? "🏖️ Sand" : "🧱 Concrete";
+    };
+    // body.appendChild(textureButton);
 
     function newOverlayDiv(show)
     {
@@ -328,15 +356,15 @@ export function Start()
         {
             setTimeout(function()
             {
-                menuButton.style.display = "none";
+                // menuButton.style.display = "none";
                 overlay.className = "";
-                history.push(menuButton);
+                // history.push(menuButton);
                 history.push(overlay);
                 history.push(menuDiv);
             }, buttonTimeout);
         }
     }
-    menuButton.onclick = openMenu;
+    // menuButton.onclick = openMenu;
 
     const settingsDiv = newOverlayDiv();
 
@@ -353,21 +381,21 @@ export function Start()
 
     const touchControlButtons = new Array();
 
-    touchControlButtons.push(newControlButton(false, "./images/triangle.png", "up", false, function()
-    {
-        changeUpState(true);
-    }, function()
-    {
-        changeUpState(false);
-    }));
-    touchControlButtons.push(newControlButton(false, "./images/triangle.png", "down", false, function()
-    {
-        changeDownState(true);
-    }, function()
-    {
-        changeDownState(false);
-    }));
-    touchControlButtons.push(newControlButton("Light", false, "light", true));
+    // touchControlButtons.push(newControlButton(false, "./images/triangle.png", "up", false, function()
+    // {
+    //     changeUpState(true);
+    // }, function()
+    // {
+    //     changeUpState(false);
+    // }));
+    // touchControlButtons.push(newControlButton(false, "./images/triangle.png", "down", false, function()
+    // {
+    //     changeDownState(true);
+    // }, function()
+    // {
+    //     changeDownState(false);
+    // }));
+    // touchControlButtons.push(newControlButton("Light", false, "light", true));
 
     if (!touchControls)
     {
@@ -379,7 +407,7 @@ export function Start()
     //#endregion
 
     //#region Menu buttons
-    newButton("Resume game", menuDiv, menuButton, false, true);
+    // newButton("Resume game", menuDiv, menuButton, false, true);
     newButton("Settings", menuDiv, settingsDiv);
     newButton("Help", menuDiv, helpDiv);
     newButton("About", menuDiv, aboutDiv);

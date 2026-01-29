@@ -1,12 +1,89 @@
-import { Group, Vector3 } from "three";
+import { Group, Vector3, TextureLoader, RepeatWrapping, SRGBColorSpace, MeshStandardMaterial } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { oceanAbsorptionUniform } from "../materials/OceanMaterial.js";
 import { lightUniform, sunVisibilityUniform } from "../materials/SkyboxMaterial.js";
+import { deltaTime } from "../scripts/Time.js";
 
 export const island = new Group();
 export const firecamp = new Group();
 
 const loader = new GLTFLoader();
+const textureLoader = new TextureLoader();
+
+// Texture paths
+const SAND_TEXTURE_PATH = 'textures/sand_04_2k/';
+const CONCRETE_TEXTURE_PATH = 'textures/concrete_wall_01_2k/';
+const ROCKS_TEXTURE_PATH = 'textures/ground_with_rocks_01_1k/';
+
+// Load sand textures
+const sandColorMap = textureLoader.load(SAND_TEXTURE_PATH + 'sand_04_color_2k.png');
+const sandNormalMap = textureLoader.load(SAND_TEXTURE_PATH + 'sand_04_normal_gl_2k.png');
+const sandRoughnessMap = textureLoader.load(SAND_TEXTURE_PATH + 'sand_04_roughness_2k.png');
+const sandAOMap = textureLoader.load(SAND_TEXTURE_PATH + 'sand_04_ambient_occlusion_2k.png');
+const sandDisplacementMap = textureLoader.load(SAND_TEXTURE_PATH + 'sand_04_height_2k.png');
+
+// Load concrete textures
+const concreteColorMap = textureLoader.load(CONCRETE_TEXTURE_PATH + 'concrete_wall_01_color_2k.png');
+const concreteNormalMap = textureLoader.load(CONCRETE_TEXTURE_PATH + 'concrete_wall_01_normal_gl_2k.png');
+const concreteRoughnessMap = textureLoader.load(CONCRETE_TEXTURE_PATH + 'concrete_wall_01_roughness_2k.png');
+const concreteAOMap = textureLoader.load(CONCRETE_TEXTURE_PATH + 'concrete_wall_01_ambient_occlusion_2k.png');
+const concreteDisplacementMap = textureLoader.load(CONCRETE_TEXTURE_PATH + 'concrete_wall_01_height_2k.png');
+
+// Load rocks texture (for bottom of island)
+const rocksColorMap = textureLoader.load(ROCKS_TEXTURE_PATH + 'ground_with_rocks_01_color_1k.png');
+
+// Configure texture settings for all textures
+const allTextures = [
+    sandColorMap, sandNormalMap, sandRoughnessMap, sandAOMap, sandDisplacementMap,
+    concreteColorMap, concreteNormalMap, concreteRoughnessMap, concreteAOMap, concreteDisplacementMap,
+    rocksColorMap
+];
+
+allTextures.forEach(texture => {
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = RepeatWrapping;
+    texture.repeat.set(4, 4); // Tile the texture for better detail
+});
+
+// Color maps need sRGB color space for correct colors
+sandColorMap.colorSpace = SRGBColorSpace;
+concreteColorMap.colorSpace = SRGBColorSpace;
+rocksColorMap.colorSpace = SRGBColorSpace;
+
+// ============================================
+// HEIGHT BLEND SETTINGS (easily tweakable)
+// ============================================
+// Height at which the blend starts (world Y coordinate)
+const ROCKS_BLEND_START = -0.2;
+// Height at which the blend ends (fully top texture)
+const ROCKS_BLEND_END = -0.1;
+// ============================================
+
+// Texture blend state
+let currentTexture = 'sand'; // 'sand' or 'concrete'
+let textureBlend = 0.0; // 0 = sand, 1 = concrete
+let targetBlend = 0.0;
+const blendSpeed = 2.0; // How fast to transition (per second)
+
+// Store materials that need texture blending
+const blendableMaterials = [];
+
+// Export function to toggle texture
+export function toggleIslandTexture() {
+    if (currentTexture === 'sand') {
+        currentTexture = 'concrete';
+        targetBlend = 1.0;
+    } else {
+        currentTexture = 'sand';
+        targetBlend = 0.0;
+    }
+    return currentTexture;
+}
+
+// Export current texture state
+export function getCurrentTexture() {
+    return currentTexture;
+}
 
 // Position in front of camera (camera at Z=0, looking into -Z)
 // Island slightly above water level (Y=0)
@@ -70,74 +147,201 @@ const oceanLightingFragment = /*glsl*/`
     }
 `;
 
-// Function to apply ocean lighting to a material using onBeforeCompile
-function applyOceanLighting(material) {
+// Function to apply ocean lighting AND texture blending to a material
+function applyIslandMaterial(material, blendUniform) {
     if (!material.isMeshStandardMaterial && !material.isMeshPhysicalMaterial && !material.isMeshBasicMaterial) {
         console.log('Skipping material:', material.type);
         return;
     }
     
-    console.log('Applying ocean lighting to material:', material.type, material.name);
+    console.log('Applying island material to:', material.type, material.name);
     
     // Force unique shader compilation with custom cache key
     material.customProgramCacheKey = () => {
-        return 'ocean_' + material.uuid;
+        return 'island_blend_ocean_' + material.uuid;
     };
     
     material.onBeforeCompile = (shader) => {
         console.log('onBeforeCompile triggered for:', material.type);
         
-        // Add uniforms - link directly to the shared uniforms so they update automatically
+        // === OCEAN LIGHTING UNIFORMS ===
         shader.uniforms.uLight = lightUniform;
         shader.uniforms.uAbsorption = oceanAbsorptionUniform;
         shader.uniforms.uSunVisibility = sunVisibilityUniform;
         
+        // === TEXTURE BLENDING UNIFORMS ===
+        shader.uniforms.uTextureBlend = blendUniform;
+        shader.uniforms.uSandMap = { value: sandColorMap };
+        shader.uniforms.uConcreteMap = { value: concreteColorMap };
+        shader.uniforms.uRocksMap = { value: rocksColorMap };
+        shader.uniforms.uTextureScale = { value: 0.5 }; // World-space texture scale
+        shader.uniforms.uRocksBlendStart = { value: ROCKS_BLEND_START };
+        shader.uniforms.uRocksBlendEnd = { value: ROCKS_BLEND_END };
+        
         // Store reference to update later
         material.userData.oceanUniforms = shader.uniforms;
         
-        // Inject uniform declarations into vertex shader (for vWorldPosition)
+        // === VERTEX SHADER MODIFICATIONS ===
         shader.vertexShader = shader.vertexShader.replace(
             '#include <common>',
             `#include <common>
-            varying vec3 vWorldPosition;`
+            varying vec3 vWorldPosition;
+            varying vec3 vWorldNormal;`
         );
         
         shader.vertexShader = shader.vertexShader.replace(
             '#include <worldpos_vertex>',
             `#include <worldpos_vertex>
-            vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;`
+            vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+            vWorldNormal = normalize(mat3(modelMatrix) * normal);`
         );
         
-        // Inject uniform declarations into fragment shader
+        // === FRAGMENT SHADER MODIFICATIONS ===
+        // Add all uniform declarations and triplanar function
         shader.fragmentShader = shader.fragmentShader.replace(
             '#include <common>',
             `#include <common>
             varying vec3 vWorldPosition;
+            varying vec3 vWorldNormal;
+            
+            // Texture blending
+            uniform float uTextureBlend;
+            uniform sampler2D uSandMap;
+            uniform sampler2D uConcreteMap;
+            uniform sampler2D uRocksMap;
+            uniform float uTextureScale;
+            uniform float uRocksBlendStart;
+            uniform float uRocksBlendEnd;
+            
+            // Triplanar mapping function to eliminate UV seams
+            vec4 triplanarSample(sampler2D tex, vec3 worldPos, vec3 worldNormal, float scale) {
+                // Calculate blend weights based on normal direction
+                vec3 blendWeights = abs(worldNormal);
+                // Sharpen the blend to reduce blurry transitions
+                blendWeights = pow(blendWeights, vec3(4.0));
+                // Normalize weights
+                blendWeights = blendWeights / (blendWeights.x + blendWeights.y + blendWeights.z);
+                
+                // Sample texture from 3 projections
+                vec3 scaledPos = worldPos * scale;
+                vec4 xProj = texture2D(tex, scaledPos.yz);
+                vec4 yProj = texture2D(tex, scaledPos.xz);
+                vec4 zProj = texture2D(tex, scaledPos.xy);
+                
+                // Blend based on normal
+                return xProj * blendWeights.x + yProj * blendWeights.y + zProj * blendWeights.z;
+            }
+            
             ${oceanLightingPars}`
         );
         
-        // Inject lighting modifications before output
+        // Replace the entire map_fragment to use triplanar mapping with height-based rocks blend
+        shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <map_fragment>',
+            `// Triplanar texture sampling (replaces UV-based sampling)
+            vec4 sandColor = triplanarSample(uSandMap, vWorldPosition, vWorldNormal, uTextureScale);
+            vec4 concreteColor = triplanarSample(uConcreteMap, vWorldPosition, vWorldNormal, uTextureScale);
+            vec4 rocksColor = triplanarSample(uRocksMap, vWorldPosition, vWorldNormal, uTextureScale);
+            
+            // First blend between sand and concrete based on button toggle
+            vec4 topTexture = mix(sandColor, concreteColor, uTextureBlend);
+            
+            // Height-based blend: rocks at bottom, top texture above
+            // smoothstep creates a gradual transition between uRocksBlendStart and uRocksBlendEnd
+            float heightBlend = smoothstep(uRocksBlendStart, uRocksBlendEnd, vWorldPosition.y);
+            
+            // Mix rocks (bottom) with top texture based on height
+            vec4 blendedTexture = mix(rocksColor, topTexture, heightBlend);
+            
+            // Apply to diffuse color
+            diffuseColor *= blendedTexture;`
+        );
+        
+        // Inject ocean lighting modifications before output
         shader.fragmentShader = shader.fragmentShader.replace(
             '#include <dithering_fragment>',
             `${oceanLightingFragment}
             #include <dithering_fragment>`
         );
         
-        console.log('Shader modified successfully');
+        console.log('Island shader modified with triplanar blending and ocean lighting');
     };
     
     material.needsUpdate = true;
 }
 
-// Traverse model and apply ocean lighting to all materials
+// Traverse model and apply ocean lighting to all materials (for firecamp only)
 function applyOceanLightingToModel(model) {
     model.traverse((child) => {
         if (child.isMesh && child.material) {
-            if (Array.isArray(child.material)) {
-                child.material.forEach(mat => applyOceanLighting(mat));
-            } else {
-                applyOceanLighting(child.material);
-            }
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach(mat => {
+                if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial || mat.isMeshBasicMaterial) {
+                    // Use a simple ocean-only version for non-island objects
+                    mat.customProgramCacheKey = () => 'ocean_' + mat.uuid;
+                    mat.onBeforeCompile = (shader) => {
+                        shader.uniforms.uLight = lightUniform;
+                        shader.uniforms.uAbsorption = oceanAbsorptionUniform;
+                        shader.uniforms.uSunVisibility = sunVisibilityUniform;
+                        
+                        shader.vertexShader = shader.vertexShader.replace(
+                            '#include <common>',
+                            `#include <common>
+                            varying vec3 vWorldPosition;`
+                        );
+                        shader.vertexShader = shader.vertexShader.replace(
+                            '#include <worldpos_vertex>',
+                            `#include <worldpos_vertex>
+                            vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;`
+                        );
+                        shader.fragmentShader = shader.fragmentShader.replace(
+                            '#include <common>',
+                            `#include <common>
+                            varying vec3 vWorldPosition;
+                            ${oceanLightingPars}`
+                        );
+                        shader.fragmentShader = shader.fragmentShader.replace(
+                            '#include <dithering_fragment>',
+                            `${oceanLightingFragment}
+                            #include <dithering_fragment>`
+                        );
+                    };
+                    mat.needsUpdate = true;
+                }
+            });
+        }
+    });
+}
+
+// Apply textures and shader modifications to island
+function applyIslandTextures(model) {
+    model.traverse((child) => {
+        if (child.isMesh && child.material) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            
+            materials.forEach(material => {
+                if (material.isMeshStandardMaterial || material.isMeshPhysicalMaterial) {
+                    console.log('Setting up island material for:', child.name);
+                    
+                    // Use triplanar for color (no UV seams)
+                    // Displacement not used - causes gaps due to bad UVs on modified cube
+                    material.map = null;
+                    material.normalMap = null;
+                    material.roughnessMap = null;
+                    material.aoMap = null;
+                    material.displacementMap = null;
+                    
+                    material.roughness = 0.9;
+                    material.metalness = 0.0;
+                    
+                    // Create blend uniform for this material
+                    const blendUniform = { value: 0.0 };
+                    blendableMaterials.push({ material, blendUniform });
+                    
+                    // Apply combined shader modifications
+                    applyIslandMaterial(material, blendUniform);
+                }
+            });
         }
     });
 }
@@ -147,11 +351,12 @@ export function Start() {
     loader.load(
         'models/island2.glb',
         (gltf) => {
-            applyOceanLightingToModel(gltf.scene);
+            // Apply island textures with blending support
+            applyIslandTextures(gltf.scene);
             island.add(gltf.scene);
             island.position.set(islandPosition.x, islandPosition.y, islandPosition.z);
             island.scale.setScalar(islandScale);
-            console.log('Island loaded with ocean lighting');
+            console.log('Island loaded with texture blending and ocean lighting');
         },
         (progress) => {
             console.log('Island loading:', (progress.loaded / progress.total * 100) + '%');
@@ -163,7 +368,7 @@ export function Start() {
 
     // Load firecamp
     loader.load(
-        'models/firecamp.glb',
+        'models/firecamp2.glb',
         (gltf) => {
             applyOceanLightingToModel(gltf.scene);
             firecamp.add(gltf.scene);
@@ -189,7 +394,20 @@ export function Start() {
 const materialsToUpdate = [];
 
 export function Update() {
-    // Update ocean uniforms for all affected materials
-    // The uniforms are linked by reference to dirToLight and absorption,
-    // so they update automatically. Only sunVisibility needs manual sync.
+    // Smoothly interpolate texture blend
+    if (textureBlend !== targetBlend) {
+        const diff = targetBlend - textureBlend;
+        const step = blendSpeed * deltaTime;
+        
+        if (Math.abs(diff) < step) {
+            textureBlend = targetBlend;
+        } else {
+            textureBlend += Math.sign(diff) * step;
+        }
+        
+        // Update all blendable materials
+        blendableMaterials.forEach(({ blendUniform }) => {
+            blendUniform.value = textureBlend;
+        });
+    }
 }
