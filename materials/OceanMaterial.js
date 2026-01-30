@@ -48,12 +48,18 @@ export const smallIterationsUniform = new Uniform(2.0);
 // Small wave (normal map) parameters
 export const normalMapScaleUniform = new Uniform(0.15);
 export const normalMapStrengthUniform = new Uniform(0.85);
-export const waveVelocity1Uniform = new Uniform({ x: 0.025, y: 0.0 });
-export const waveVelocity2Uniform = new Uniform({ x: 0.0, y: 0.025 });
+export const waveVelocity1Uniform = new Uniform({ x: 0.035, y: 0.0 });
+export const waveVelocity2Uniform = new Uniform({ x: 0.0, y: 0.035 });
 
 // Edge fade parameters (ocean size and fade distance)
 export const oceanHalfSizeUniform = new Uniform({ x: 200.0, y: 200.0 }); // halfWidth, halfDepth
-export const edgeFadeDistanceUniform = new Uniform(10.0); // Distance from edge where fade starts
+export const edgeFadeDistanceUniform = new Uniform(3.0); // Distance from edge where fade starts
+
+// Foam parameters for island shore
+export const foamIslandCenterUniform = new Uniform({ x: 0.0, y: -3.3 }); // Island XZ position
+export const foamIslandRadiusUniform = new Uniform(1.08);   // Approximate island radius (tweak this to match waterline)
+export const foamWidthUniform = new Uniform(0.01);         // Width of foam ring (thinner = smaller value)
+export const foamIntensityUniform = new Uniform(0.55);      // Foam opacity (0-1, higher = more visible)
 
 export function SetOceanColor(r, g, b) {
     // Invert color to absorption: bright color component = low absorption of that color
@@ -95,7 +101,11 @@ export function Start()
         _WaveVelocity1: waveVelocity1Uniform,
         _WaveVelocity2: waveVelocity2Uniform,
         _OceanHalfSize: oceanHalfSizeUniform,
-        _EdgeFadeDistance: edgeFadeDistanceUniform
+        _EdgeFadeDistance: edgeFadeDistanceUniform,
+        _FoamIslandCenter: foamIslandCenterUniform,
+        _FoamIslandRadius: foamIslandRadiusUniform,
+        _FoamWidth: foamWidthUniform,
+        _FoamIntensity: foamIntensityUniform
     };
     SetSkyboxUniforms(surface);
     

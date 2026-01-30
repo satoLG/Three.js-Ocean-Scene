@@ -27,7 +27,7 @@ const FIRE_SCALE = 1.3;           // Overall fire size
 const FIRE_HEIGHT_OFFSET = 0.7;   // Height above firecamp base
 const FIRE_LIGHT_INTENSITY = 3.0;  // Max light intensity at night
 const FIRE_LIGHT_FLICKER = 0.5;    // How much the light flickers (0-1)
-const FADE_SPEED = 0.6;            // How fast fire fades in/out
+const FADE_SPEED = 0.5;            // How fast fire fades in/out
 
 // EMBER/SPARK PARTICLE SETTINGS
 const EMBER_COUNT = 10;            // Number of ember particles

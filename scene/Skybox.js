@@ -9,7 +9,7 @@ export const rotationMatrix = new Uniform(new Matrix3());
 
 const halfSize = 2000;
 const speed = 0.05;
-const transitionSpeed = 0.85; // Faster speed for day/night transitions
+const transitionSpeed = 0.65; // Faster speed for day/night transitions
 const initial = new Vector3(0, 1, 0);
 const axis = new Vector3(1, 0, 0); // Rotate around X axis so sun rises/sets in front of camera
 let angle = -1;

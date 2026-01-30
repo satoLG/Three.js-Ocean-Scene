@@ -56,7 +56,7 @@ rocksColorMap.colorSpace = SRGBColorSpace;
 // Height at which the blend starts (world Y coordinate)
 const ROCKS_BLEND_START = -0.2;
 // Height at which the blend ends (fully top texture)
-const ROCKS_BLEND_END = -0.1;
+const ROCKS_BLEND_END = 0.21;
 // ============================================
 
 // Texture blend state

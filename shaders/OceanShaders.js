@@ -25,6 +25,12 @@ export const surfaceFragment =
 
     uniform vec2 _OceanHalfSize;
     uniform float _EdgeFadeDistance;
+    
+    // Foam uniforms
+    uniform vec2 _FoamIslandCenter;
+    uniform float _FoamIslandRadius;
+    uniform float _FoamWidth;
+    uniform float _FoamIntensity;
 
     varying vec2 _worldPos;
     varying vec2 _uv;
@@ -39,12 +45,35 @@ export const surfaceFragment =
         // Smooth fade - transparent at edge (Z=0), opaque further in
         return smoothstep(0.0, _EdgeFadeDistance, distFromNearEdge);
     }
+    
+    float calcFoam(vec2 pos) {
+        // Distance from island center (XZ plane)
+        float dist = length(pos - _FoamIslandCenter);
+        
+        // Foam ring around island edge
+        float innerEdge = _FoamIslandRadius;
+        float outerEdge = _FoamIslandRadius + _FoamWidth;
+        
+        // Smooth foam band
+        float foam = smoothstep(innerEdge - 0.1, innerEdge, dist) * 
+                     smoothstep(outerEdge + 0.1, outerEdge, dist);
+        
+        // Add some variation with noise from normal map time offset
+        float noiseOffset = sin(pos.x * 8.0 + _Time * 2.0) * 0.1 + 
+                           cos(pos.y * 6.0 + _Time * 1.5) * 0.1;
+        foam *= (0.8 + noiseOffset);
+        
+        return foam * _FoamIntensity;
+    }
 
     void main()
     {
         // Calculate edge fade
         float edgeFade = calcEdgeFade(_worldPos);
         if (edgeFade <= 0.0) discard;
+        
+        // Calculate foam
+        float foam = calcFoam(_worldPos);
 
         vec3 viewVec = vec3(_worldPos.x, _elevation, _worldPos.y) - cameraPosition;
         float viewLen = length(viewVec);
@@ -67,8 +96,12 @@ export const surfaceFragment =
 
             float fog = clamp(viewLen / FOG_DISTANCE + dither, 0.0, 1.0);
             surface = mix(surface, sampleFog(viewDir), fog);
+            
+            // Add white foam
+            vec3 foamColor = vec3(1.0, 1.0, 1.0);
+            surface = mix(surface, foamColor, foam);
 
-            gl_FragColor = vec4(surface, max(reflectivity, fog) * edgeFade);
+            gl_FragColor = vec4(surface, max(max(reflectivity, fog), foam) * edgeFade);
             return;
         }
 
@@ -87,12 +120,20 @@ export const surfaceFragment =
             sampleY = r.y * (MAX_VIEW_DEPTH - viewLen);
             vec3 rColor = exp((sampleY - MAX_VIEW_DEPTH_DENSITY) * _Absorption);
             rColor *= _Light;
+            
+            // Add white foam
+            vec3 foamColor = vec3(1.0, 1.0, 1.0);
+            vec3 finalColor = mix(mix(rColor, light, t), foamColor, foam);
 
-            gl_FragColor = vec4(mix(rColor, light, t), edgeFade);
+            gl_FragColor = vec4(finalColor, max(edgeFade, foam));
             return;
         }
+        
+        // Add white foam
+        vec3 foamColor = vec3(1.0, 1.0, 1.0);
+        vec3 finalColor = mix(light, foamColor, foam);
 
-        gl_FragColor = vec4(light, t * edgeFade);
+        gl_FragColor = vec4(finalColor, max(t * edgeFade, foam));
     }
 `;
 

@@ -5,6 +5,7 @@ import * as SeaFloor from "../scene/SeaFloor.js";
 import * as Blocks from "../scene/Blocks.js";
 import * as Island from "../scene/Island.js";
 import * as Fire from "../scene/Fire.js";
+import * as Audio from "./Audio.js";
 import { axes } from "./Debug.js";
 import { lightUniform, sunVisibilityUniform } from "../materials/SkyboxMaterial.js";
 
@@ -51,7 +52,7 @@ export function SetFOV(value)
     camera.updateProjectionMatrix();
 }
 
-export let antialias = false;
+export let antialias = true;
 export function SetAntialias(value)
 {
     antialias = value;
@@ -135,6 +136,9 @@ export function Start()
     Fire.Start();
     Island.firecamp.add(Fire.fire);
 
+    // Initialize audio system
+    Audio.Start();
+
     // Blocks.Start();
     // for (let i = 0; i < Blocks.blocks.length; i++)
     // {
@@ -149,6 +153,7 @@ export function Update()
     SeaFloor.Update();
     Island.Update();
     Fire.Update();
+    Audio.Update();
 
     // Sync lights with skybox sun position and intensity
     directionalLight.position.copy(Skybox.dirToLight).multiplyScalar(100);
