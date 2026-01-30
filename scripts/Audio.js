@@ -37,6 +37,7 @@ let wasDay = true;
 
 // User interaction flag (needed for audio context)
 let audioInitialized = false;
+let audioInitializing = false;
 
 async function loadAudioBuffer(url) {
     const response = await fetch(url);
@@ -47,20 +48,73 @@ async function loadAudioBuffer(url) {
 function initAudioContext() {
     if (audioContext) return;
     
+    // Create AudioContext - must happen in user gesture on mobile
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = audioContext.createGain();
     masterGain.gain.value = 1.0;
     masterGain.connect(audioContext.destination);
 }
 
-async function initAudio() {
-    if (audioInitialized) return;
+// Synchronous part that MUST run inside user gesture
+function unlockAudio() {
+    if (audioContext) {
+        // If context exists but is suspended, resume it
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+        return;
+    }
     
+    // Create the context inside the user gesture
     initAudioContext();
+    
+    // iOS hack: play a silent buffer to unlock audio
+    // This must happen synchronously within the user gesture
+    const silentBuffer = audioContext.createBuffer(1, 1, 22050);
+    const silentSource = audioContext.createBufferSource();
+    silentSource.buffer = silentBuffer;
+    silentSource.connect(audioContext.destination);
+    silentSource.start(0);
+    
+    // Also try to resume if suspended
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+}
+
+async function initAudio() {
+    if (audioInitialized || audioInitializing) return;
+    audioInitializing = true;
+    
+    // Make sure context exists and is running
+    if (!audioContext) {
+        initAudioContext();
+    }
     
     // Resume audio context if suspended (browser autoplay policy)
     if (audioContext.state === 'suspended') {
-        await audioContext.resume();
+        try {
+            await audioContext.resume();
+        } catch (e) {
+            console.warn('Failed to resume audio context:', e);
+        }
+    }
+    
+    // Wait for context to be running
+    if (audioContext.state !== 'running') {
+        // Try waiting for state change
+        await new Promise((resolve) => {
+            const checkState = () => {
+                if (audioContext.state === 'running') {
+                    resolve();
+                } else {
+                    setTimeout(checkState, 100);
+                }
+            };
+            // Timeout after 2 seconds
+            setTimeout(resolve, 2000);
+            checkState();
+        });
     }
     
     try {
@@ -83,9 +137,10 @@ async function initAudio() {
         }
         
         audioInitialized = true;
-        console.log('Audio system initialized');
+        console.log('Audio system initialized, context state:', audioContext.state);
     } catch (error) {
         console.error('Failed to load audio:', error);
+        audioInitializing = false;
     }
 }
 
@@ -176,16 +231,34 @@ export function Start() {
     wasDay = isDayTime();
     
     // Initialize audio on first user interaction
-    const initOnInteraction = () => {
+    // Mobile browsers require AudioContext creation inside user gesture
+    const initOnInteraction = (e) => {
+        // Unlock audio synchronously first (critical for iOS)
+        unlockAudio();
+        
+        // Then load and start sounds asynchronously
         initAudio();
+        
+        // Remove all listeners after first interaction
         document.removeEventListener('click', initOnInteraction);
         document.removeEventListener('keydown', initOnInteraction);
         document.removeEventListener('touchstart', initOnInteraction);
+        document.removeEventListener('touchend', initOnInteraction);
+        document.removeEventListener('pointerdown', initOnInteraction);
+        document.removeEventListener('pointerup', initOnInteraction);
     };
     
+    // Use multiple event types for maximum compatibility:
+    // - click: desktop and some mobile
+    // - keydown: keyboard interaction
+    // - touchstart/touchend: iOS Safari
+    // - pointerdown/pointerup: Android Chrome and modern browsers
     document.addEventListener('click', initOnInteraction);
     document.addEventListener('keydown', initOnInteraction);
-    document.addEventListener('touchstart', initOnInteraction);
+    document.addEventListener('touchstart', initOnInteraction, { passive: true });
+    document.addEventListener('touchend', initOnInteraction, { passive: true });
+    document.addEventListener('pointerdown', initOnInteraction, { passive: true });
+    document.addEventListener('pointerup', initOnInteraction, { passive: true });
 }
 
 export function Update() {
