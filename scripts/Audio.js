@@ -38,6 +38,7 @@ let wasDay = true;
 // User interaction flag (needed for audio context)
 let audioInitialized = false;
 let audioInitializing = false;
+let listenersRemoved = false;
 
 async function loadAudioBuffer(url) {
     const response = await fetch(url);
@@ -45,7 +46,7 @@ async function loadAudioBuffer(url) {
     return await audioContext.decodeAudioData(arrayBuffer);
 }
 
-function initAudioContext() {
+function createAudioContext() {
     if (audioContext) return;
     
     // Create AudioContext - must happen in user gesture on mobile
@@ -53,69 +54,50 @@ function initAudioContext() {
     masterGain = audioContext.createGain();
     masterGain.gain.value = 1.0;
     masterGain.connect(audioContext.destination);
-}
-
-// Synchronous part that MUST run inside user gesture
-function unlockAudio() {
-    if (audioContext) {
-        // If context exists but is suspended, resume it
-        if (audioContext.state === 'suspended') {
-            audioContext.resume();
-        }
-        return;
-    }
     
-    // Create the context inside the user gesture
-    initAudioContext();
-    
-    // iOS hack: play a silent buffer to unlock audio
-    // This must happen synchronously within the user gesture
-    const silentBuffer = audioContext.createBuffer(1, 1, 22050);
-    const silentSource = audioContext.createBufferSource();
-    silentSource.buffer = silentBuffer;
-    silentSource.connect(audioContext.destination);
-    silentSource.start(0);
-    
-    // Also try to resume if suspended
-    if (audioContext.state === 'suspended') {
-        audioContext.resume();
-    }
+    console.log('AudioContext created, initial state:', audioContext.state);
 }
 
 async function initAudio() {
     if (audioInitialized || audioInitializing) return;
     audioInitializing = true;
     
-    // Make sure context exists and is running
+    console.log('initAudio called, context state:', audioContext ? audioContext.state : 'no context');
+    
+    // Create context if it doesn't exist
     if (!audioContext) {
-        initAudioContext();
+        createAudioContext();
     }
     
-    // Resume audio context if suspended (browser autoplay policy)
+    // Resume audio context - this is critical for mobile
+    // The resume() call MUST be awaited and MUST be in the call stack of a user gesture
     if (audioContext.state === 'suspended') {
+        console.log('Attempting to resume suspended AudioContext...');
         try {
             await audioContext.resume();
+            console.log('AudioContext resumed, new state:', audioContext.state);
         } catch (e) {
-            console.warn('Failed to resume audio context:', e);
+            console.error('Failed to resume audio context:', e);
+            audioInitializing = false;
+            return;
         }
     }
     
-    // Wait for context to be running
+    // Double-check the state
     if (audioContext.state !== 'running') {
-        // Try waiting for state change
-        await new Promise((resolve) => {
-            const checkState = () => {
-                if (audioContext.state === 'running') {
-                    resolve();
-                } else {
-                    setTimeout(checkState, 100);
-                }
-            };
-            // Timeout after 2 seconds
-            setTimeout(resolve, 2000);
-            checkState();
-        });
+        console.warn('AudioContext not running after resume, state:', audioContext.state);
+        // Try one more time with a slight delay
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (audioContext.state === 'suspended') {
+            try {
+                await audioContext.resume();
+            } catch (e) {
+                console.error('Second resume attempt failed:', e);
+            }
+        }
     }
+    
+    console.log('Final AudioContext state before loading:', audioContext.state);
     
     try {
         // Load all audio buffers
@@ -124,6 +106,13 @@ async function initAudio() {
             loadAudioBuffer('audio/wind-soft-breeze.wav'),
             loadAudioBuffer('audio/fireplace.m4a')
         ]);
+        
+        console.log('Audio buffers loaded successfully');
+        
+        // Ensure context is running before starting sounds
+        if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+        }
         
         // Start water sound immediately (looping)
         startWaterSound();
@@ -137,7 +126,7 @@ async function initAudio() {
         }
         
         audioInitialized = true;
-        console.log('Audio system initialized, context state:', audioContext.state);
+        console.log('Audio system fully initialized, context state:', audioContext.state);
     } catch (error) {
         console.error('Failed to load audio:', error);
         audioInitializing = false;
@@ -227,41 +216,44 @@ function stopFireplaceSound() {
     fireplaceFading = false;
 }
 
+// Called when user clicks the START button
+export function startAudio() {
+    if (listenersRemoved) return;
+    listenersRemoved = true;
+    
+    console.log('Start button clicked, initializing audio...');
+    
+    // Step 1: Create AudioContext SYNCHRONOUSLY within user gesture
+    createAudioContext();
+    
+    // Step 2: Call resume() SYNCHRONOUSLY (the call must be sync, even though it returns a promise)
+    const resumePromise = audioContext.resume();
+    
+    console.log('resume() called synchronously, state:', audioContext.state);
+    
+    // Step 3: After resume promise resolves, load and play audio
+    resumePromise.then(() => {
+        console.log('AudioContext resumed, state:', audioContext.state);
+        initAudio();
+    }).catch(err => {
+        console.error('Failed to resume AudioContext:', err);
+        // Try to init anyway
+        initAudio();
+    });
+}
+
 export function Start() {
     wasDay = isDayTime();
-    
-    // Initialize audio on first user interaction
-    // Mobile browsers require AudioContext creation inside user gesture
-    const initOnInteraction = (e) => {
-        // Unlock audio synchronously first (critical for iOS)
-        unlockAudio();
-        
-        // Then load and start sounds asynchronously
-        initAudio();
-        
-        // Remove all listeners after first interaction
-        document.removeEventListener('click', initOnInteraction);
-        document.removeEventListener('keydown', initOnInteraction);
-        document.removeEventListener('touchstart', initOnInteraction);
-        document.removeEventListener('touchend', initOnInteraction);
-        document.removeEventListener('pointerdown', initOnInteraction);
-        document.removeEventListener('pointerup', initOnInteraction);
-    };
-    
-    // Use multiple event types for maximum compatibility:
-    // - click: desktop and some mobile
-    // - keydown: keyboard interaction
-    // - touchstart/touchend: iOS Safari
-    // - pointerdown/pointerup: Android Chrome and modern browsers
-    document.addEventListener('click', initOnInteraction);
-    document.addEventListener('keydown', initOnInteraction);
-    document.addEventListener('touchstart', initOnInteraction, { passive: true });
-    document.addEventListener('touchend', initOnInteraction, { passive: true });
-    document.addEventListener('pointerdown', initOnInteraction, { passive: true });
-    document.addEventListener('pointerup', initOnInteraction, { passive: true });
+    // Audio is now initialized via startAudio() called from the START button
 }
 
 export function Update() {
+    // Keep trying to resume audio context if it's suspended
+    // This handles edge cases where the initial resume didn't work
+    if (audioContext && audioContext.state === 'suspended' && audioInitialized) {
+        audioContext.resume().catch(() => {});
+    }
+    
     if (!audioInitialized || !audioContext) return;
     
     const isDay = isDayTime();
