@@ -7,6 +7,7 @@ import { time } from "./Time.js";
 import { spotLightDistance, spotLightDistanceUniform, SetOceanColor, bigWavesElevationUniform, bigWavesFrequencyUniform, bigWavesSpeedUniform, smallWavesElevationUniform, smallWavesFrequencyUniform, smallWavesSpeedUniform, smallIterationsUniform, normalMapScaleUniform, normalMapStrengthUniform, waveVelocity1Uniform, waveVelocity2Uniform } from "../materials/OceanMaterial.js";
 import { toggleDayNight, isDayTime } from "../scene/Skybox.js";
 import { toggleIslandTexture, getCurrentTexture } from "../scene/Island.js";
+import { startAudio } from "./Audio.js";
 
 export const controlsDiv1 = document.createElement("info");
 
@@ -21,6 +22,32 @@ let history = new Array();
 
 export function Start()
 {   
+    // Start overlay with START button
+    const startOverlay = document.createElement("div");
+    startOverlay.id = "start-overlay";
+    
+    const startButton = document.createElement("button");
+    startButton.id = "start-button";
+    startButton.textContent = "START";
+    startButton.onclick = function() {
+        // Start audio (must happen synchronously in click handler)
+        startAudio();
+        
+        // Remove blur from canvas
+        document.body.classList.add('started');
+        
+        // Hide the overlay
+        startOverlay.classList.add('hidden');
+        
+        // Remove overlay from DOM after transition
+        setTimeout(() => {
+            startOverlay.remove();
+        }, 1000);
+    };
+    
+    startOverlay.appendChild(startButton);
+    document.body.appendChild(startOverlay);
+    
     // Name display on top left
     const nameDisplay = document.createElement("div");
     nameDisplay.className = "name-display";
