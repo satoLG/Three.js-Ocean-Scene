@@ -16,6 +16,9 @@ const FIREPLACE_FADE_DURATION = 3.0;   // Seconds to fade in fireplace
 let audioContext = null;
 let masterGain = null;
 
+// iOS silent mode workaround - HTML5 audio element
+let iosSilentModeUnlocker = null;
+
 // Sound sources
 let waterSource = null;
 let waterGain = null;
@@ -44,6 +47,39 @@ async function loadAudioBuffer(url) {
     const response = await fetch(url);
     const arrayBuffer = await response.arrayBuffer();
     return await audioContext.decodeAudioData(arrayBuffer);
+}
+
+// iOS Silent Mode Workaround:
+// iOS treats Web Audio API as "ambient" audio that respects silent mode.
+// To bypass this, we create an HTML5 <audio> element that loops silently.
+// iOS treats <audio> elements as "media playback" which ignores silent mode.
+function unlockiOSSilentMode() {
+    if (iosSilentModeUnlocker) return; // Already created
+    
+    // Create a silent audio element that loops forever
+    iosSilentModeUnlocker = document.createElement('audio');
+    
+    // Tiny silent MP3 encoded as base64 (valid silent audio file)
+    iosSilentModeUnlocker.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwmHAAAAAAD/+1DEAAAHAAGf9AAAIiQAM/8kYBAAJGAcEAQBgYfB8HygIHBQEBw4PygIHB8oCBw/8oHD/KD//8oc///5QOH/B8HwfD4f/ygAAQCAwMAAAAeD4IBgYPB8Hg+D4Pg+H//t/rWAYDAnwfB8P/q//0f5Q5//+n9H+j/R/o/0f6P9H/0f//9H+j/+j///1gGBhQAZGhoaFhYWDQ0JDxAQEBYWFg4ODgwMDBobGxwcHA4ODg0NDQ4ODAwMDBgYGBwcHBobGxwcHBgYGBobG//7UMQFAASUAZ/5KQCiNAAz/yUgEBYWFhYWFhYWFhYUFBQWFhYWFhQUFBYWFhYWFhoaGhoaGhoaGhocHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHA==';
+    
+    iosSilentModeUnlocker.loop = true;
+    iosSilentModeUnlocker.playsInline = true;
+    iosSilentModeUnlocker.setAttribute('playsinline', '');
+    iosSilentModeUnlocker.setAttribute('webkit-playsinline', '');
+    
+    // Very quiet but still active - this tricks iOS into "playback" mode
+    iosSilentModeUnlocker.volume = 0.01;
+    
+    // Play - must be called within a user gesture
+    const playPromise = iosSilentModeUnlocker.play();
+    
+    if (playPromise !== undefined) {
+        playPromise.then(() => {
+            console.log('iOS silent mode unlocker started - audio will play in silent mode');
+        }).catch(err => {
+            console.warn('iOS silent mode unlocker failed:', err);
+        });
+    }
 }
 
 function createAudioContext() {
@@ -222,6 +258,10 @@ export function startAudio() {
     listenersRemoved = true;
     
     console.log('Start button clicked, initializing audio...');
+    
+    // CRITICAL: Unlock iOS silent mode FIRST, synchronously within user gesture
+    // This must happen before AudioContext creation
+    unlockiOSSilentMode();
     
     // Step 1: Create AudioContext SYNCHRONOUSLY within user gesture
     createAudioContext();
