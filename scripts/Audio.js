@@ -16,24 +16,29 @@ const FIREPLACE_FADE_DURATION = 3.0;   // Seconds to fade in fireplace
 let audioContext = null;
 let masterGain = null;
 
-// iOS silent mode workaround - HTML5 audio element
-let iosSilentModeUnlocker = null;
+// HTML5 Audio elements - iOS treats these as "media playback"
+// We connect them to AudioContext to keep GainNode control
+let waterAudioElement = null;
+let breezeAudioElement = null;
+let fireplaceAudioElement = null;
 
-// Sound sources
+// MediaElementSource nodes (bridge between <audio> and AudioContext)
 let waterSource = null;
-let waterGain = null;
-let waterBuffer = null;
-
-let breezeBuffer = null;
-let breezeGain = null;
-let breezeTimeout = null;
-
+let breezeSource = null;
 let fireplaceSource = null;
+
+// Gain nodes for volume control
+let waterGain = null;
+let breezeGain = null;
 let fireplaceGain = null;
-let fireplaceBuffer = null;
+
+// Fireplace state
 let fireplaceFadeStart = 0;
 let fireplaceFading = false;
 let fireplaceActive = false;
+
+// Breeze scheduling
+let breezeTimeout = null;
 
 // Track previous day state to detect transitions
 let wasDay = true;
@@ -43,107 +48,35 @@ let audioInitialized = false;
 let audioInitializing = false;
 let listenersRemoved = false;
 
-async function loadAudioBuffer(url) {
-    const response = await fetch(url);
-    const arrayBuffer = await response.arrayBuffer();
-    return await audioContext.decodeAudioData(arrayBuffer);
-}
-
-// iOS Silent Mode Workaround + Background Playback:
-// iOS treats Web Audio API as "ambient" audio that respects silent mode.
-// To bypass this, we create an HTML5 <audio> element that loops silently.
-// iOS treats <audio> elements as "media playback" which ignores silent mode.
-// Combined with Media Session API, this enables lock screen / background playback.
-function unlockiOSSilentMode() {
-    if (iosSilentModeUnlocker) return; // Already created
+// Create HTML5 Audio elements - these are treated as "media playback" by iOS
+// Unlike AudioBufferSource, these work in silent mode and background
+function createAudioElements() {
+    // Water ambient sound - loops continuously
+    waterAudioElement = new Audio('audio/water3.wav');
+    waterAudioElement.loop = true;
+    waterAudioElement.preload = 'auto';
     
-    // Create a silent audio element that loops forever
-    iosSilentModeUnlocker = document.createElement('audio');
+    // Breeze sound - plays occasionally
+    breezeAudioElement = new Audio('audio/wind-soft-breeze.wav');
+    breezeAudioElement.loop = false;
+    breezeAudioElement.preload = 'auto';
     
-    // Tiny silent MP3 encoded as base64 (valid silent audio file)
-    iosSilentModeUnlocker.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwmHAAAAAAD/+1DEAAAHAAGf9AAAIiQAM/8kYBAAJGAcEAQBgYfB8HygIHBQEBw4PygIHB8oCBw/8oHD/KD//8oc///5QOH/B8HwfD4f/ygAAQCAwMAAAAeD4IBgYPB8Hg+D4Pg+H//t/rWAYDAnwfB8P/q//0f5Q5//+n9H+j/R/o/0f6P9H/0f//9H+j/+j///1gGBhQAZGhoaFhYWDQ0JDxAQEBYWFg4ODgwMDBobGxwcHA4ODg0NDQ4ODAwMDBgYGBwcHBobGxwcHBgYGBobG//7UMQFAASUAZ/5KQCiNAAz/yUgEBYWFhYWFhYWFhYUFBQWFhYWFhQUFBYWFhYWFhoaGhoaGhoaGhocHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHA==';
+    // Fireplace sound - plays at night
+    fireplaceAudioElement = new Audio('audio/fireplace.m4a');
+    fireplaceAudioElement.loop = true;
+    fireplaceAudioElement.preload = 'auto';
     
-    iosSilentModeUnlocker.loop = true;
-    iosSilentModeUnlocker.playsInline = true;
-    iosSilentModeUnlocker.setAttribute('playsinline', '');
-    iosSilentModeUnlocker.setAttribute('webkit-playsinline', '');
-    
-    // Very quiet but still active - this tricks iOS into "playback" mode
-    iosSilentModeUnlocker.volume = 0.01;
-    
-    // Play - must be called within a user gesture
-    const playPromise = iosSilentModeUnlocker.play();
-    
-    if (playPromise !== undefined) {
-        playPromise.then(() => {
-            console.log('iOS silent mode unlocker started - audio will play in silent mode');
-            // Setup Media Session for background playback and lock screen controls
-            setupMediaSession();
-        }).catch(err => {
-            console.warn('iOS silent mode unlocker failed:', err);
-        });
-    }
-}
-
-// Media Session API - enables background playback and lock screen controls
-// This is what makes YouTube/Spotify work when phone is locked
-function setupMediaSession() {
-    if (!('mediaSession' in navigator)) {
-        console.log('Media Session API not supported');
-        return;
-    }
-    
-    // Set metadata that appears on lock screen / control center
-    // Use existing image as fallback, or add proper icons later:
-    // - images/icon-96.png (96x96)
-    // - images/icon-192.png (192x192)  
-    // - images/icon-512.png (512x512)
-    navigator.mediaSession.metadata = new MediaMetadata({
-        title: 'Ocean Ambience',
-        artist: 'Leo Sato',
-        album: 'Three.js Ocean Scene',
-        artwork: [
-            { src: 'images/sand.png', sizes: '512x512', type: 'image/png' }
-        ]
+    // When breeze ends, schedule the next one
+    breezeAudioElement.addEventListener('ended', () => {
+        scheduleBreezeSound();
     });
     
-    // Set playback state
-    navigator.mediaSession.playbackState = 'playing';
+    // Error handling
+    waterAudioElement.addEventListener('error', (e) => console.error('Water audio error:', e));
+    breezeAudioElement.addEventListener('error', (e) => console.error('Breeze audio error:', e));
+    fireplaceAudioElement.addEventListener('error', (e) => console.error('Fireplace audio error:', e));
     
-    // Handle media controls (play/pause buttons on lock screen)
-    navigator.mediaSession.setActionHandler('play', () => {
-        if (iosSilentModeUnlocker) {
-            iosSilentModeUnlocker.play();
-        }
-        if (audioContext && audioContext.state === 'suspended') {
-            audioContext.resume();
-        }
-        if (masterGain) {
-            masterGain.gain.value = 1.0;
-        }
-        navigator.mediaSession.playbackState = 'playing';
-        console.log('Media Session: Play');
-    });
-    
-    navigator.mediaSession.setActionHandler('pause', () => {
-        // Mute instead of stopping to keep session alive
-        if (masterGain) {
-            masterGain.gain.value = 0.0;
-        }
-        navigator.mediaSession.playbackState = 'paused';
-        console.log('Media Session: Pause');
-    });
-    
-    // Optional: handle stop
-    navigator.mediaSession.setActionHandler('stop', () => {
-        if (masterGain) {
-            masterGain.gain.value = 0.0;
-        }
-        navigator.mediaSession.playbackState = 'none';
-        console.log('Media Session: Stop');
-    });
-    
-    console.log('Media Session API configured for background playback');
+    console.log('HTML5 Audio elements created');
 }
 
 function createAudioContext() {
@@ -158,6 +91,47 @@ function createAudioContext() {
     console.log('AudioContext created, initial state:', audioContext.state);
 }
 
+// Media Session API - enables background playback and lock screen controls
+function setupMediaSession() {
+    if (!('mediaSession' in navigator)) {
+        console.log('Media Session API not supported');
+        return;
+    }
+    
+    navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'Ocean Ambience',
+        artist: 'Leo Sato',
+        album: 'Three.js Ocean Scene',
+        artwork: [
+            { src: 'images/sand.png', sizes: '512x512', type: 'image/png' }
+        ]
+    });
+    
+    navigator.mediaSession.playbackState = 'playing';
+    
+    // Handle media controls
+    navigator.mediaSession.setActionHandler('play', () => {
+        if (waterAudioElement) waterAudioElement.play().catch(() => {});
+        if (fireplaceActive && fireplaceAudioElement) fireplaceAudioElement.play().catch(() => {});
+        if (audioContext && audioContext.state === 'suspended') audioContext.resume();
+        navigator.mediaSession.playbackState = 'playing';
+    });
+    
+    navigator.mediaSession.setActionHandler('pause', () => {
+        if (waterAudioElement) waterAudioElement.pause();
+        if (fireplaceAudioElement) fireplaceAudioElement.pause();
+        navigator.mediaSession.playbackState = 'paused';
+    });
+    
+    navigator.mediaSession.setActionHandler('stop', () => {
+        if (waterAudioElement) { waterAudioElement.pause(); waterAudioElement.currentTime = 0; }
+        if (fireplaceAudioElement) { fireplaceAudioElement.pause(); fireplaceAudioElement.currentTime = 0; }
+        navigator.mediaSession.playbackState = 'none';
+    });
+    
+    console.log('Media Session API configured');
+}
+
 async function initAudio() {
     if (audioInitialized || audioInitializing) return;
     audioInitializing = true;
@@ -169,8 +143,12 @@ async function initAudio() {
         createAudioContext();
     }
     
-    // Resume audio context - this is critical for mobile
-    // The resume() call MUST be awaited and MUST be in the call stack of a user gesture
+    // Create HTML5 audio elements if they don't exist
+    if (!waterAudioElement) {
+        createAudioElements();
+    }
+    
+    // Resume audio context if suspended
     if (audioContext.state === 'suspended') {
         console.log('Attempting to resume suspended AudioContext...');
         try {
@@ -183,36 +161,34 @@ async function initAudio() {
         }
     }
     
-    // Double-check the state
-    if (audioContext.state !== 'running') {
-        console.warn('AudioContext not running after resume, state:', audioContext.state);
-        // Try one more time with a slight delay
-        await new Promise(resolve => setTimeout(resolve, 100));
-        if (audioContext.state === 'suspended') {
-            try {
-                await audioContext.resume();
-            } catch (e) {
-                console.error('Second resume attempt failed:', e);
-            }
-        }
-    }
-    
-    console.log('Final AudioContext state before loading:', audioContext.state);
+    console.log('Final AudioContext state before connecting:', audioContext.state);
     
     try {
-        // Load all audio buffers
-        [waterBuffer, breezeBuffer, fireplaceBuffer] = await Promise.all([
-            loadAudioBuffer('audio/water3.wav'),
-            loadAudioBuffer('audio/wind-soft-breeze.wav'),
-            loadAudioBuffer('audio/fireplace.m4a')
-        ]);
+        // Connect HTML5 audio elements to AudioContext via createMediaElementSource
+        // This gives us GainNode control while keeping iOS background playback compatibility
         
-        console.log('Audio buffers loaded successfully');
+        // Water source
+        waterSource = audioContext.createMediaElementSource(waterAudioElement);
+        waterGain = audioContext.createGain();
+        waterGain.gain.value = WATER_VOLUME;
+        waterSource.connect(waterGain);
+        waterGain.connect(masterGain);
         
-        // Ensure context is running before starting sounds
-        if (audioContext.state === 'suspended') {
-            await audioContext.resume();
-        }
+        // Breeze source  
+        breezeSource = audioContext.createMediaElementSource(breezeAudioElement);
+        breezeGain = audioContext.createGain();
+        breezeGain.gain.value = BREEZE_VOLUME;
+        breezeSource.connect(breezeGain);
+        breezeGain.connect(masterGain);
+        
+        // Fireplace source
+        fireplaceSource = audioContext.createMediaElementSource(fireplaceAudioElement);
+        fireplaceGain = audioContext.createGain();
+        fireplaceGain.gain.value = FIREPLACE_VOLUME_MIN;
+        fireplaceSource.connect(fireplaceGain);
+        fireplaceGain.connect(masterGain);
+        
+        console.log('Audio sources connected to AudioContext with GainNodes');
         
         // Start water sound immediately (looping)
         startWaterSound();
@@ -225,26 +201,26 @@ async function initAudio() {
             startFireplaceSound();
         }
         
+        // Setup Media Session
+        setupMediaSession();
+        
         audioInitialized = true;
-        console.log('Audio system fully initialized, context state:', audioContext.state);
+        console.log('Audio system fully initialized (HTML5 + Web Audio API hybrid)');
     } catch (error) {
-        console.error('Failed to load audio:', error);
+        console.error('Failed to initialize audio:', error);
         audioInitializing = false;
     }
 }
 
 function startWaterSound() {
-    if (!waterBuffer || waterSource) return;
+    if (!waterAudioElement) return;
     
-    waterGain = audioContext.createGain();
-    waterGain.gain.value = WATER_VOLUME;
-    waterGain.connect(masterGain);
-    
-    waterSource = audioContext.createBufferSource();
-    waterSource.buffer = waterBuffer;
-    waterSource.loop = true;
-    waterSource.connect(waterGain);
-    waterSource.start();
+    // Play the HTML5 audio element - it's already connected to AudioContext
+    waterAudioElement.play().then(() => {
+        console.log('Water sound started playing');
+    }).catch((error) => {
+        console.error('Failed to play water sound:', error);
+    });
 }
 
 function scheduleBreezeSound() {
@@ -260,58 +236,65 @@ function scheduleBreezeSound() {
 }
 
 function playBreezeSound() {
-    if (!breezeBuffer || !audioContext) return;
+    if (!breezeAudioElement) return;
     
-    breezeGain = audioContext.createGain();
-    breezeGain.gain.value = BREEZE_VOLUME;
-    breezeGain.connect(masterGain);
-    
-    const breezeSource = audioContext.createBufferSource();
-    breezeSource.buffer = breezeBuffer;
-    breezeSource.loop = false;
-    breezeSource.connect(breezeGain);
-    breezeSource.start();
-    
-    // Schedule next breeze after this one ends
-    breezeSource.onended = () => {
+    // Reset and play the breeze sound
+    breezeAudioElement.currentTime = 0;
+    breezeAudioElement.play().then(() => {
+        console.log('Breeze sound playing');
+    }).catch((error) => {
+        console.error('Failed to play breeze sound:', error);
+        // Still schedule next breeze even if this one failed
         scheduleBreezeSound();
-    };
+    });
+    // The 'ended' event listener in createAudioElements() will schedule the next breeze
 }
 
 function startFireplaceSound() {
-    if (!fireplaceBuffer || fireplaceActive) return;
+    if (!fireplaceAudioElement || fireplaceActive) return;
     
-    fireplaceGain = audioContext.createGain();
-    fireplaceGain.gain.value = FIREPLACE_VOLUME_MIN;
-    fireplaceGain.connect(masterGain);
+    // Reset gain for fade-in
+    if (fireplaceGain) {
+        fireplaceGain.gain.value = FIREPLACE_VOLUME_MIN;
+    }
     
-    fireplaceSource = audioContext.createBufferSource();
-    fireplaceSource.buffer = fireplaceBuffer;
-    fireplaceSource.loop = true;
-    fireplaceSource.connect(fireplaceGain);
-    fireplaceSource.start();
+    // Play the HTML5 audio element
+    fireplaceAudioElement.currentTime = 0;
+    fireplaceAudioElement.play().then(() => {
+        console.log('Fireplace sound started');
+    }).catch((error) => {
+        console.error('Failed to play fireplace sound:', error);
+    });
     
     // Start fade-in
-    fireplaceFadeStart = audioContext.currentTime;
+    if (audioContext) {
+        fireplaceFadeStart = audioContext.currentTime;
+    }
     fireplaceFading = true;
     fireplaceActive = true;
 }
 
 function stopFireplaceSound() {
-    if (!fireplaceSource || !fireplaceActive) return;
+    if (!fireplaceAudioElement || !fireplaceActive) return;
     
-    // Quick fade out
-    const fadeOutDuration = 0.5;
-    fireplaceGain.gain.linearRampToValueAtTime(0, audioContext.currentTime + fadeOutDuration);
+    // Quick fade out using GainNode
+    if (fireplaceGain && audioContext) {
+        const fadeOutDuration = 0.5;
+        fireplaceGain.gain.linearRampToValueAtTime(0, audioContext.currentTime + fadeOutDuration);
+        
+        // Pause the audio after fade out
+        setTimeout(() => {
+            if (fireplaceAudioElement) {
+                fireplaceAudioElement.pause();
+                fireplaceAudioElement.currentTime = 0;
+            }
+        }, fadeOutDuration * 1000);
+    } else {
+        // Fallback: just pause immediately
+        fireplaceAudioElement.pause();
+        fireplaceAudioElement.currentTime = 0;
+    }
     
-    // Stop after fade out
-    const sourceToStop = fireplaceSource;
-    setTimeout(() => {
-        sourceToStop.stop();
-    }, fadeOutDuration * 1000);
-    
-    fireplaceSource = null;
-    fireplaceGain = null;
     fireplaceActive = false;
     fireplaceFading = false;
 }
@@ -323,10 +306,6 @@ export function startAudio() {
     
     console.log('Start button clicked, initializing audio...');
     
-    // CRITICAL: Unlock iOS silent mode FIRST, synchronously within user gesture
-    // This must happen before AudioContext creation
-    unlockiOSSilentMode();
-    
     // Step 1: Create AudioContext SYNCHRONOUSLY within user gesture
     createAudioContext();
     
@@ -335,7 +314,7 @@ export function startAudio() {
     
     console.log('resume() called synchronously, state:', audioContext.state);
     
-    // Step 3: After resume promise resolves, load and play audio
+    // Step 3: After resume promise resolves, initialize and play audio
     resumePromise.then(() => {
         console.log('AudioContext resumed, state:', audioContext.state);
         initAudio();
