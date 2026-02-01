@@ -49,10 +49,11 @@ async function loadAudioBuffer(url) {
     return await audioContext.decodeAudioData(arrayBuffer);
 }
 
-// iOS Silent Mode Workaround:
+// iOS Silent Mode Workaround + Background Playback:
 // iOS treats Web Audio API as "ambient" audio that respects silent mode.
 // To bypass this, we create an HTML5 <audio> element that loops silently.
 // iOS treats <audio> elements as "media playback" which ignores silent mode.
+// Combined with Media Session API, this enables lock screen / background playback.
 function unlockiOSSilentMode() {
     if (iosSilentModeUnlocker) return; // Already created
     
@@ -76,10 +77,73 @@ function unlockiOSSilentMode() {
     if (playPromise !== undefined) {
         playPromise.then(() => {
             console.log('iOS silent mode unlocker started - audio will play in silent mode');
+            // Setup Media Session for background playback and lock screen controls
+            setupMediaSession();
         }).catch(err => {
             console.warn('iOS silent mode unlocker failed:', err);
         });
     }
+}
+
+// Media Session API - enables background playback and lock screen controls
+// This is what makes YouTube/Spotify work when phone is locked
+function setupMediaSession() {
+    if (!('mediaSession' in navigator)) {
+        console.log('Media Session API not supported');
+        return;
+    }
+    
+    // Set metadata that appears on lock screen / control center
+    // Use existing image as fallback, or add proper icons later:
+    // - images/icon-96.png (96x96)
+    // - images/icon-192.png (192x192)  
+    // - images/icon-512.png (512x512)
+    navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'Ocean Ambience',
+        artist: 'Leo Sato',
+        album: 'Three.js Ocean Scene',
+        artwork: [
+            { src: 'images/sand.png', sizes: '512x512', type: 'image/png' }
+        ]
+    });
+    
+    // Set playback state
+    navigator.mediaSession.playbackState = 'playing';
+    
+    // Handle media controls (play/pause buttons on lock screen)
+    navigator.mediaSession.setActionHandler('play', () => {
+        if (iosSilentModeUnlocker) {
+            iosSilentModeUnlocker.play();
+        }
+        if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+        if (masterGain) {
+            masterGain.gain.value = 1.0;
+        }
+        navigator.mediaSession.playbackState = 'playing';
+        console.log('Media Session: Play');
+    });
+    
+    navigator.mediaSession.setActionHandler('pause', () => {
+        // Mute instead of stopping to keep session alive
+        if (masterGain) {
+            masterGain.gain.value = 0.0;
+        }
+        navigator.mediaSession.playbackState = 'paused';
+        console.log('Media Session: Pause');
+    });
+    
+    // Optional: handle stop
+    navigator.mediaSession.setActionHandler('stop', () => {
+        if (masterGain) {
+            masterGain.gain.value = 0.0;
+        }
+        navigator.mediaSession.playbackState = 'none';
+        console.log('Media Session: Stop');
+    });
+    
+    console.log('Media Session API configured for background playback');
 }
 
 function createAudioContext() {
